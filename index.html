@@ -107,13 +107,20 @@
     background: rgba(5, 10, 6, 0.85);
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* "flex-start" es el respaldo si el navegador no soporta "safe center": así el
+       contenido siempre empieza arriba y es alcanzable con scroll, en vez de quedar
+       centrado y con la parte de arriba (el título) fuera de alcance. */
+    justify-content: flex-start;
+    justify-content: safe center;
     align-items: center;
     text-align: center;
     color: #fff;
     z-index: 10;
     gap: 16px;
     padding: 20px;
+    /* Si el contenido no cabe en pantallas chicas, se puede hacer scroll en vez de cortarse */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .overlay.hidden { display: none; }
@@ -352,8 +359,16 @@
     #combo-panel { top: 60px; font-size: 12px; padding: 3px 10px; }
     #dash-panel { min-width: 140px; font-size: 10px; padding: 4px 8px; bottom: 8px; }
     #mute-btn { width: 32px; height: 32px; font-size: 14px; top: 8px; right: 8px; }
-    .overlay h1 { font-size: 24px; }
-    .species-card { width: 130px; padding: 8px 6px; }
+    .overlay { gap: 8px; padding: 14px 14px 28px; }
+    .overlay h1 { font-size: 22px; }
+    .overlay p, .overlay ul { font-size: 13px; max-width: 100%; }
+    .overlay li { margin-bottom: 3px; }
+    .species-picker { gap: 8px; }
+    .species-card { width: 104px; padding: 6px 5px; gap: 2px; }
+    .species-swatch { width: 24px; height: 24px; }
+    .species-card b { font-size: 12px; }
+    .species-card span:not(.species-swatch) { font-size: 10px; }
+    .btn { padding: 10px 24px; font-size: 15px; }
   }
 </style>
 </head>
