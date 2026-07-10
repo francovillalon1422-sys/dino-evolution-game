@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rex Evolution 3D &mdash; Devora y Evoluciona</title>
+
+<!-- PWA: instalable desde el navegador (Agregar a pantalla de inicio) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a3d24">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rex Evolution">
+
+<style>
+  /* ============================================================
+     ESTILOS GENERALES
+     ============================================================ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    background: #0b1d13;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(ellipse at center, #2e5d3a 0%, #1a3d24 55%, #0d2414 100%);
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ------------------------------------------------------------
+     HUD (marcador superior)
+     ------------------------------------------------------------ */
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 22px;
+    pointer-events: none;
+    z-index: 5;
+    gap: 20px;
+  }
+
+  .hud-panel {
+    background: rgba(10, 20, 12, 0.65);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 8px 16px;
+    color: #f0f0f0;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+    backdrop-filter: blur(3px);
+  }
+
+  #lives-panel { display: flex; gap: 6px; align-items: center; font-size: 26px; }
+  .heart { transition: opacity .2s, filter .2s; }
+  .heart.lost { opacity: 0.25; filter: grayscale(1); }
+
+  #score-panel { font-size: 18px; font-weight: bold; text-align: center; min-width: 140px; }
+  #score-panel span { color: #ffd93d; }
+
+  #level-panel { min-width: 190px; }
+  #level-name { font-size: 15px; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  #level-name b { color: #7CFC7C; }
+
+  #xp-bar-bg {
+    width: 100%;
+    height: 12px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.25);
+  }
+  #xp-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #7CFC7C, #ffd93d);
+    transition: width .25s ease-out;
+  }
+
+  /* ------------------------------------------------------------
+     Pantallas superpuestas (inicio / game over)
+     ------------------------------------------------------------ */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 10, 6, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: #fff;
+    z-index: 10;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-size: clamp(28px, 5vw, 52px);
+    color: #7CFC7C;
+    text-shadow: 0 0 18px rgba(124,252,124,0.6);
+  }
+
+  .overlay h2 { font-size: clamp(22px, 4vw, 36px); color: #ff5555; }
+
+  .overlay p, .overlay ul { font-size: 16px; max-width: 560px; line-height: 1.6; color: #ddd; }
+  .overlay ul { text-align: left; list-style: none; }
+  .overlay li { margin-bottom: 6px; }
+  .overlay li b { color: #ffd93d; }
+
+  /* ------------------------------------------------------------
+     Selector de especie
+     ------------------------------------------------------------ */
+  #species-picker {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 620px;
+  }
+  .species-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 170px;
+    padding: 12px 10px;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    color: #eee;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .species-card:hover { border-color: rgba(255,255,255,0.45); transform: translateY(-2px); }
+  .species-card.selected { border-color: #7CFC7C; background: rgba(124,252,124,0.12); }
+  .species-card b { font-size: 15px; }
+  .species-card span:not(.species-swatch) { font-size: 12px; color: #ccc; line-height: 1.3; }
+  .species-swatch {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4);
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+  }
+
+  #final-score { font-size: 22px; color: #ffd93d; font-weight: bold; }
+
+  .btn {
+    margin-top: 10px;
+    padding: 14px 36px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #0d2414;
+    background: linear-gradient(180deg, #9dff9d, #4caf50);
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #2e7d32, 0 6px 14px rgba(0,0,0,0.4);
+    transition: transform .08s ease;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2e7d32; }
+
+  .btn-secondary {
+    background: linear-gradient(180deg, #6b7a82, #445056);
+    box-shadow: 0 4px 0 #2c353a, 0 6px 14px rgba(0,0,0,0.4);
+    color: #f0f0f0;
+  }
+  .btn-secondary:active { box-shadow: 0 1px 0 #2c353a; }
+
+  #damage-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,0,0,0.35);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+  }
+
+  /* ------------------------------------------------------------
+     Combo, récord y habilidad especial
+     ------------------------------------------------------------ */
+  #combo-panel {
+    position: absolute;
+    top: 78px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.8);
+    background: rgba(20, 10, 0, 0.7);
+    border: 2px solid #ffd93d;
+    border-radius: 10px;
+    padding: 4px 14px;
+    color: #ffd93d;
+    font-weight: bold;
+    font-size: 16px;
+    opacity: 0;
+    transition: opacity .15s ease, transform .15s ease;
+    pointer-events: none;
+    z-index: 5;
+    white-space: nowrap;
+  }
+  #combo-panel.show { opacity: 1; transform: translateX(-50%) scale(1); }
+
+  #high-score-line { font-size: 13px; color: #ffd93d; margin-top: -4px; }
+
+  #dash-panel {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    pointer-events: none;
+    background: rgba(10, 20, 12, 0.65);
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 6px 14px;
+    color: #f0f0f0;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: center;
+    min-width: 200px;
+  }
+  #dash-bar-bg {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.25);
+    margin-top: 4px;
+  }
+  #dash-bar-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #4dd6ff, #7CFC7C);
+  }
+  #dash-panel.ready #dash-label { color: #7CFC7C; }
+
+  #mute-btn {
+    position: absolute;
+    top: 14px;
+    right: 22px;
+    z-index: 7;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(10, 20, 12, 0.65);
+    color: #f0f0f0;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ------------------------------------------------------------
+     Etiquetas de texto flotante proyectadas desde el mundo 3D
+     ------------------------------------------------------------ */
+  .world-label {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    color: #ffd93d;
+    font-weight: bold;
+    font-size: 20px;
+    text-shadow: 0 0 4px rgba(0,0,0,0.85), 0 0 10px rgba(0,0,0,0.5);
+    pointer-events: none;
+    z-index: 4;
+    white-space: nowrap;
+  }
+
+  /* ------------------------------------------------------------
+     Controles táctiles (móvil)
+     ------------------------------------------------------------ */
+  #touch-controls { display: none; }
+  body.touch-device #touch-controls { display: block; }
+
+  #joystick-zone {
+    position: absolute;
+    left: 0; bottom: 0;
+    width: 50%; height: 45%;
+    z-index: 8;
+    touch-action: none;
+  }
+  #joystick-base {
+    position: absolute;
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.35);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #joystick-thumb {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 46px; height: 46px;
+    margin-left: -23px; margin-top: -23px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.55);
+  }
+
+  #bite-button {
+    position: absolute;
+    right: 26px; bottom: 26px;
+    width: 84px; height: 84px;
+    border-radius: 50%;
+    background: rgba(255, 100, 60, 0.55);
+    border: 3px solid rgba(255,255,255,0.5);
+    font-size: 34px;
+    z-index: 8;
+    touch-action: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #bite-button:active { background: rgba(255, 160, 60, 0.75); }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Flash rojo al recibir daño -->
+  <div id="damage-flash"></div>
+
+  <!-- Botón de silencio -->
+  <button id="mute-btn" title="Silenciar/Activar sonido">🔊</button>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="lives-panel" class="hud-panel"></div>
+    <div id="level-panel" class="hud-panel">
+      <div id="level-name"><span>Nivel <b id="level-num">1</b> &mdash; <span id="level-title">Cría</span></span></div>
+      <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+    </div>
+    <div id="score-panel" class="hud-panel">
+      PUNTOS<br><span id="score-value">0</span>
+      <div id="high-score-line">Récord: <span id="high-score-value">0</span></div>
+    </div>
+  </div>
+
+  <!-- Combo -->
+  <div id="combo-panel"></div>
+
+  <!-- Habilidad especial: Mordisco Feroz -->
+  <div id="dash-panel">
+    <span id="dash-label">MORDISCO FEROZ &mdash; ESPACIO</span>
+    <div id="dash-bar-bg"><div id="dash-bar-fill"></div></div>
+  </div>
+
+  <!-- Controles táctiles (solo visibles en móvil) -->
+  <div id="touch-controls">
+    <div id="joystick-zone">
+      <div id="joystick-base"><div id="joystick-thumb"></div></div>
+    </div>
+    <button id="bite-button">🦷</button>
+  </div>
+
+  <!-- Pantalla de inicio -->
+  <div id="start-screen" class="overlay">
+    <h1>🦖 REX EVOLUTION 3D</h1>
+    <p>Elige tu especie y devora dinosaurios más pequeños para ganar XP y evolucionar. ¡Al llegar al nivel máximo puedes seguir evolucionando hasta convertirte en un ápex volador!</p>
+
+    <div id="species-picker">
+      <button class="species-card selected" data-species="rex">
+        <span class="species-swatch" style="background:#ff5252"></span>
+        <b>Tiranosaurio Rex</b>
+        <span>Equilibrado: tamaño y mordida fuertes.</span>
+      </button>
+      <button class="species-card" data-species="raptor">
+        <span class="species-swatch" style="background:#e6c752"></span>
+        <b>Velocirraptor</b>
+        <span>Ágil y muy rápido, pero más pequeño.</span>
+      </button>
+      <button class="species-card" data-species="trike">
+        <span class="species-swatch" style="background:#42708f"></span>
+        <b>Triceratops</b>
+        <span>Grande y resistente, pero más lento.</span>
+      </button>
+    </div>
+
+    <ul>
+      <li><b>Mover:</b> WASD/Flechas (o el joystick táctil en móvil)</li>
+      <li><b>Comer:</b> choca con dinosaurios más pequeños o de tu mismo nivel</li>
+      <li><b>Peligro:</b> evita a los dinosaurios de nivel mayor, ¡te quitarán una vida!</li>
+      <li><b>Combo:</b> come rápido y seguido para multiplicar tus puntos</li>
+      <li><b>Mordisco Feroz:</b> pulsa ESPACIO (o el botón 🦷) para un ataque especial que te permite comer un nivel por encima del tuyo durante unos segundos</li>
+      <li><b>Meta:</b> evoluciona hasta el Nivel 4 (¡Volador Ápex!) y consigue la mayor puntuación posible</li>
+    </ul>
+    <p id="start-high-score">Récord actual: 0</p>
+    <button class="btn" id="start-btn">Comenzar a Cazar</button>
+  </div>
+
+  <!-- Pantalla de Game Over -->
+  <div id="game-over-screen" class="overlay hidden">
+    <h2>💀 GAME OVER</h2>
+    <p id="final-score">Puntuación final: 0</p>
+    <p id="final-level">Nivel alcanzado: 1</p>
+    <p id="final-high-score">Récord: 0</p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+      <button class="btn" id="restart-btn">Reintentar</button>
+      <button class="btn btn-secondary" id="change-species-btn">Cambiar de especie</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* ================================================================
+   REX EVOLUTION 3D
+   Motor de render: three.js (WebGL), cargado por CDN — gratuito y de
+   código abierto. Todo el arte 3D es geometría primitiva de bajo poli
+   generada por código, no se usan modelos ni texturas de pago.
+   ================================================================ */
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+// ---------- Referencias a elementos del DOM ----------
+const canvas = document.getElementById('gameCanvas');
+const container = document.getElementById('game-container');
+
+const hudScore = document.getElementById('score-value');
+const hudLevelNum = document.getElementById('level-num');
+const hudLevelTitle = document.getElementById('level-title');
+const hudXpFill = document.getElementById('xp-bar-fill');
+const hudLivesPanel = document.getElementById('lives-panel');
+const damageFlash = document.getElementById('damage-flash');
+
+const startScreen = document.getElementById('start-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const finalScoreEl = document.getElementById('final-score');
+const finalLevelEl = document.getElementById('final-level');
+const finalHighScoreEl = document.getElementById('final-high-score');
+const startHighScoreEl = document.getElementById('start-high-score');
+const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
+const changeSpeciesBtn = document.getElementById('change-species-btn');
+const muteBtn = document.getElementById('mute-btn');
+const hudHighScore = document.getElementById('high-score-value');
+const comboPanel = document.getElementById('combo-panel');
+const dashPanel = document.getElementById('dash-panel');
+const dashBarFill = document.getElementById('dash-bar-fill');
+
+const speciesCards = document.querySelectorAll('.species-card');
+
+const joystickZone = document.getElementById('joystick-zone');
+const joystickBase = document.getElementById('joystick-base');
+const joystickThumb = document.getElementById('joystick-thumb');
+const biteButton = document.getElementById('bite-button');
+
+// ================================================================
+// UTILIDADES (sin dependencias del motor 3D)
+// ================================================================
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function shortestAngleDelta(target, current) {
+  let d = (target - current) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+function disposeObject3D(root) {
+  root.traverse((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => m.dispose());
+    }
+  });
+}
+
+// ================================================================
+// ESCENA 3D: cámara, render, luces y suelo
+// ================================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a3d24);
+scene.fog = new THREE.Fog(0x1a3d24, 40, 95);
+
+const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.1, 500);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+function resizeRenderer() {
+  const w = container.clientWidth, h = container.clientHeight;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resizeRenderer);
+resizeRenderer();
+
+// Luces: hemisferio (rebote de cielo/suelo) + direccional tipo "sol" con sombra
+const hemiLight = new THREE.HemisphereLight(0xbfe3ff, 0x2e5d3a, 0.95);
+scene.add(hemiLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff2d0, 1.15);
+sunLight.position.set(35, 55, 20);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(1024, 1024);
+sunLight.shadow.camera.left = -70;
+sunLight.shadow.camera.right = 70;
+sunLight.shadow.camera.top = 70;
+sunLight.shadow.camera.bottom = -70;
+sunLight.shadow.camera.far = 150;
+scene.add(sunLight);
+
+// ================================================================
+// ARENA: tamaño del mundo de juego, fijo, independiente de la ventana
+// ================================================================
+const ARENA_WIDTH = 100;
+const ARENA_DEPTH = 80;
+// Convierte coordenadas "lógicas" (0..ARENA_WIDTH, 0..ARENA_DEPTH) a mundo 3D centrado en el origen
+function worldX(logicalX) { return logicalX - ARENA_WIDTH / 2; }
+function worldZ(logicalY) { return logicalY - ARENA_DEPTH / 2; }
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(ARENA_WIDTH + 60, ARENA_DEPTH + 60, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x2e5d3a, roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Decoración estática (rocas y arbustos de bajo poli), generada una sola vez.
+// Las rocas son obstáculos sólidos (se guardan en coordenadas lógicas para colisión);
+// los arbustos son solo decorativos y se puede pasar a través de ellos.
+const obstacles = [];
+(function buildStaticDecor() {
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6a5e, flatShading: true, roughness: 1 });
+  const bushMat = new THREE.MeshStandardMaterial({ color: 0x2c6e3c, flatShading: true, roughness: 1 });
+  for (let i = 0; i < 22; i++) {
+    // Evitar el centro del área (punto de aparición del jugador)
+    let lx, ly;
+    do {
+      lx = rand(0, ARENA_WIDTH);
+      ly = rand(0, ARENA_DEPTH);
+    } while (Math.hypot(lx - ARENA_WIDTH / 2, ly - ARENA_DEPTH / 2) < 8);
+    const wx = worldX(lx), wz = worldZ(ly);
+
+    if (Math.random() < 0.5) {
+      const s = rand(0.7, 1.5);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rockMat);
+      rock.position.set(wx, s * 0.5, wz);
+      rock.rotation.set(rand(0, Math.PI), rand(0, Math.PI), rand(0, Math.PI));
+      rock.castShadow = true; rock.receiveShadow = true;
+      scene.add(rock);
+      obstacles.push({ x: lx, y: ly, radius: s * 0.85 });
+    } else {
+      const s = rand(0.7, 1.4);
+      const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), bushMat);
+      bush.position.set(wx, s * 0.7, wz);
+      bush.castShadow = true; bush.receiveShadow = true;
+      scene.add(bush);
+    }
+  }
+})();
+
+// Nubes lejanas: parallax lento y constante, decorativo
+const cloudClusters = [];
+(function buildClouds() {
+  const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+  for (let i = 0; i < 7; i++) {
+    const cluster = new THREE.Group();
+    for (let j = 0; j < 3; j++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(rand(2.5, 4.5), 6, 5), cloudMat);
+      puff.position.set(j * 3.2 - 4.8, rand(-0.5, 0.5), rand(-1, 1));
+      cluster.add(puff);
+    }
+    cluster.position.set(rand(-ARENA_WIDTH, ARENA_WIDTH), rand(18, 28), rand(-ARENA_DEPTH, ARENA_DEPTH));
+    cluster.userData.speed = rand(0.6, 1.6);
+    scene.add(cluster);
+    cloudClusters.push(cluster);
+  }
+})();
+
+// ================================================================
+// AUDIO (Web Audio API generado por código, sin archivos externos)
+// ================================================================
+let audioCtx = null;
+let masterGain = null;
+let musicNodes = [];
+let muted = false;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = muted ? 0 : 0.5;
+  masterGain.connect(audioCtx.destination);
+  startAmbientMusic();
+}
+
+// Tono simple con envolvente de volumen (ataque instantáneo, caída exponencial)
+function playTone(freq, duration, type, volume, glideTo) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, audioCtx.currentTime + duration);
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain).connect(masterGain);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function sfxBite()    { playTone(rand(170, 260), 0.12, 'square', 0.22); }
+function sfxDamage()  { playTone(140, 0.35, 'sawtooth', 0.3, 40); }
+function sfxCombo()   { playTone(660, 0.1, 'sine', 0.18); }
+function sfxPowerUp() { playTone(500, 0.15, 'triangle', 0.25, 1100); }
+function sfxDash()    { playTone(300, 0.25, 'sawtooth', 0.22, 900); }
+function sfxLevelUp() {
+  [0, 0.12, 0.24].forEach((t, i) => setTimeout(() => playTone(330 + i * 110, 0.2, 'triangle', 0.28), t * 1000));
+}
+
+// Fondo ambiental: acorde grave sostenido con oscilaciones muy suaves de volumen
+function startAmbientMusic() {
+  const baseFreqs = [82.4, 103.8, 123.5]; // acorde de tríada grave (E2-G#2-B2 aprox.)
+  musicNodes = baseFreqs.map((f) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.035;
+    osc.connect(gain).connect(masterGain);
+    osc.start();
+    return { osc, gain };
+  });
+}
+
+function toggleMute() {
+  muted = !muted;
+  if (audioCtx) masterGain.gain.value = muted ? 0 : 0.5;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+}
+
+// ================================================================
+// RÉCORD (guardado en el navegador)
+// ================================================================
+const HIGH_SCORE_KEY = 'rexEvolutionHighScore';
+function getHighScore() { return parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0', 10); }
+function saveHighScoreIfBeaten(value) {
+  const current = getHighScore();
+  if (value > current) { localStorage.setItem(HIGH_SCORE_KEY, String(value)); return true; }
+  return false;
+}
+
+// ================================================================
+// ESPECIES JUGABLES Y NIVELES DE EVOLUCIÓN (unidades de mundo 3D)
+// ================================================================
+// Cada especie tiene su propia progresión de 3 niveles (Cría → Juvenil → Alfa),
+// con estadísticas distintas (tamaño/velocidad). Al llegar al nivel máximo de
+// cualquier especie, con suficiente XP extra evoluciona a un 4º nivel compartido:
+// un ápex volador (ver FLYER_LEVEL más abajo).
+const SPECIES = {
+  rex: {
+    name: 'Tiranosaurio Rex',
+    blurb: 'Equilibrado: tamaño y mordida fuertes.',
+    variant: 'rex',
+    levels: [
+      null,
+      { title: 'Cría',      radius: 1.3, color: '#7CFC7C', dark: '#2f6b34', light: '#d4ffc0', maxSpeed: 13,  xpToNext: 60  },
+      { title: 'Juvenil',   radius: 2.0, color: '#ffb84d', dark: '#94551f', light: '#ffe6b8', maxSpeed: 11,  xpToNext: 160 },
+      { title: 'Alfa Rex',  radius: 2.9, color: '#ff5252', dark: '#801717', light: '#ffc2b8', maxSpeed: 9.5, xpToNext: 300 }
+    ]
+  },
+  raptor: {
+    name: 'Velocirraptor',
+    blurb: 'Ágil y muy rápido, pero más pequeño y frágil.',
+    variant: 'raptor',
+    levels: [
+      null,
+      { title: 'Cría',         radius: 1.0,  color: '#c9a63e', dark: '#7a5f1c', light: '#f0dca0', maxSpeed: 16,   xpToNext: 60  },
+      { title: 'Juvenil',      radius: 1.55, color: '#d9b84a', dark: '#8a6b1e', light: '#f5e3ab', maxSpeed: 14,   xpToNext: 160 },
+      { title: 'Alfa Raptor',  radius: 2.2,  color: '#e6c752', dark: '#8f6f1f', light: '#fce9b0', maxSpeed: 12.5, xpToNext: 300 }
+    ]
+  },
+  trike: {
+    name: 'Triceratops',
+    blurb: 'Grande y resistente, pero más lento.',
+    variant: 'trike',
+    levels: [
+      null,
+      { title: 'Cría',       radius: 1.5, color: '#7aa6c9', dark: '#3a5f7a', light: '#c9e2f0', maxSpeed: 10.5, xpToNext: 60  },
+      { title: 'Juvenil',    radius: 2.3, color: '#5f8fb0', dark: '#2c4a5e', light: '#b0d2e6', maxSpeed: 9,    xpToNext: 160 },
+      { title: 'Alfa Trike', radius: 3.3, color: '#42708f', dark: '#1c3542', light: '#9cc4dc', maxSpeed: 7.5,  xpToNext: 300 }
+    ]
+  }
+};
+
+// Nivel 4: evolución final compartida por cualquier especie — un ápex volador
+const FLYER_LEVEL = {
+  title: 'Volador Ápex', radius: 3.0, color: '#c9d6e0', dark: '#5c6b75', light: '#eef4f8',
+  maxSpeed: 15, xpToNext: Infinity, flying: true, flightHeight: 4.5
+};
+
+function buildPlayerLevels(speciesKey) {
+  return [...SPECIES[speciesKey].levels, FLYER_LEVEL];
+}
+
+let selectedSpecies = 'rex';
+let PLAYER_LEVELS = buildPlayerLevels(selectedSpecies);
+const MAX_LEVEL = 4; // 3 niveles propios de la especie + 1 nivel volador compartido
+
+// Tipos de dinosaurios enemigos: nivel, tamaño, velocidad, color y puntos
+// 'variant' define la silueta/ornamentos que se construyen (ver buildDinoGroup)
+const ENEMY_TYPES = {
+  small:  { level: 1, radius: 0.9, speed: 9.5, color: '#4dd6c9', dark: '#1d6b62', light: '#d4fff8', variant: 'small',  xp: 12, points: 10 },
+  medium: { level: 2, radius: 1.6, speed: 6.5, color: '#b06cf0', dark: '#5a2680', light: '#ecd6ff', variant: 'medium', xp: 30, points: 25 },
+  giant:  { level: 3, radius: 2.6, speed: 4.0, color: '#7a3b2e', dark: '#2b120c', light: '#c99a7a', variant: 'giant',  xp: 55, points: 50 }
+};
+
+// Comida especial (power-up): la puede comer cualquier nivel, sin riesgo
+const POWERUP = { radius: 0.8, xp: 40, points: 40, color: '#ffe14d', dark: '#c9930a', light: '#fff6c2' };
+
+// Habilidad especial del jugador: durante un tiempo puede comer un nivel por encima
+// del suyo y se mueve más rápido, a cambio de un cooldown largo.
+const DASH_DURATION = 1.3;
+const DASH_COOLDOWN = 9;
+
+// ================================================================
+// CONSTRUCCIÓN DE MODELOS 3D (bajo poli, generados por código)
+// ================================================================
+// Sombreado suave (no facetado) para que los dinosaurios se lean como criaturas
+// y no se confundan con las rocas del escenario, que sí usan flatShading.
+function makeStdMat(colorHex) {
+  return new THREE.MeshStandardMaterial({ color: colorHex, flatShading: false, roughness: 0.8, metalness: 0.05 });
+}
+
+// Cuenta cuántos "dientes" o adornos llevar según el nivel/tipo, con un mínimo legible
+function ornamentCount(detail, min, max) {
+  return Math.round(min + (max - min) * clamp((detail - 1) / 2, 0, 1));
+}
+
+// Construye un dinosaurio a escala unitaria (radio=1); luego se escala por group.scale
+function buildDinoGroup(palette, variant, detail) {
+  const group = new THREE.Group();
+  const matBody = makeStdMat(palette.color);
+  const matDark = makeStdMat(palette.dark);
+  const matLight = makeStdMat(palette.light || '#ffffff');
+  const matWhite = makeStdMat('#fdfdfd');
+  const matEyeBlack = makeStdMat('#161616');
+
+  function addMesh(geo, mat, x, y, z) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    group.add(m);
+    return m;
+  }
+
+  const isQuad = variant === 'trike';
+  const isFlyer = variant === 'flyer';
+
+  // --- Piernas: columnas de apoyo verticales bajo la cadera (no se inclinan con el torso) ---
+  const legTopY = isQuad ? 1.1 : variant === 'raptor' ? 1.4 : 1.3;
+  const legTopR = isQuad ? 0.2 : 0.16;
+  const legBotR = isQuad ? 0.25 : 0.2;
+
+  function buildLeg(x, z) {
+    const leg = addMesh(new THREE.CylinderGeometry(legTopR, legBotR, legTopY, 6), matDark, x, legTopY / 2, z);
+    addMesh(new THREE.SphereGeometry(legBotR * 1.05, 6, 4), matDark, x, legTopY * 0.09, z + legBotR * 0.7).scale.set(1, 0.5, 1.3);
+    return leg;
+  }
+
+  let legL, legR, legFL, legFR;
+  if (isQuad) {
+    // Cuadrúpedo: patas traseras más separadas y delanteras más juntas, postura estable
+    legL = buildLeg(-0.55, -0.5);
+    legR = buildLeg(-0.55, 0.5);
+    legFL = buildLeg(0.55, -0.42);
+    legFR = buildLeg(0.55, 0.42);
+  } else {
+    // Bípedo: ambas patas bajo la cadera, lado a lado (no repartidas de morro a cola)
+    legL = buildLeg(-0.1, -0.22);
+    legR = buildLeg(-0.1, 0.22);
+  }
+
+  // --- Torso: cuerpo, cola, brazos, cabeza y ornamentos, todo como una sola unidad inclinada ---
+  // Postura real de depredador/volador alerta (cadera abajo, cabeza en alto, cola hacia atrás
+  // y algo más baja) en vez de quedar parado en vertical como un ave doméstica.
+  const torsoGroup = new THREE.Group();
+  torsoGroup.position.y = legTopY;
+  torsoGroup.rotation.z = isQuad ? 0.03 : 0.17;
+  group.add(torsoGroup);
+
+  function addTorso(geo, mat, x, y, z) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    torsoGroup.add(m);
+    return m;
+  }
+
+  // --- Cuerpo + vientre más claro ---
+  const bodyRadius = isQuad ? 1.05 : variant === 'raptor' ? 0.8 : 0.9;
+  const bodyScaleXYZ = isQuad ? [1.05, 0.7, 1.3] : variant === 'raptor' ? [0.85, 0.62, 1.0] : isFlyer ? [0.9, 0.62, 1.05] : [1, 0.7, 1.1];
+  const bodyHalfHeight = bodyRadius * bodyScaleXYZ[1];
+  const bodyY = bodyHalfHeight - 0.1;
+  addTorso(new THREE.SphereGeometry(bodyRadius, 10, 8), matBody, -0.15, bodyY, 0).scale.set(bodyScaleXYZ[0], bodyScaleXYZ[1], bodyScaleXYZ[2]);
+  addTorso(new THREE.SphereGeometry(bodyRadius * 0.83, 10, 8), matLight, -0.2, bodyY - 0.28, 0)
+    .scale.set(bodyScaleXYZ[0] * 0.9, bodyScaleXYZ[1] * 0.7, bodyScaleXYZ[2] * 0.85);
+
+  // --- Cola (longitud según especie: corta y robusta en el triceratops, timón corto en el volador) ---
+  const tailLen = variant === 'giant' ? 2.1 : variant === 'small' ? 1.5
+    : variant === 'raptor' ? 2.1 : isQuad ? 1.0 : isFlyer ? 0.9 : 1.8;
+  const tail = addTorso(new THREE.ConeGeometry(isQuad ? 0.3 : 0.36, tailLen, 6), matBody, -1.15, bodyY - 0.1, 0);
+  tail.rotation.z = Math.PI / 2;
+  if (variant === 'giant') {
+    addTorso(new THREE.SphereGeometry(0.34, 6, 5), matDark, -1.15 - tailLen * 0.85, bodyY - 0.25, 0);
+  }
+
+  // --- Alas (solo el volador): pivote en la raíz para que el aleteo gire desde el hombro ---
+  let wingL = null, wingR = null;
+  if (isFlyer) {
+    const wingGeo = new THREE.BoxGeometry(0.08, 0.5, 1.9, 1, 1, 1);
+    wingGeo.translate(0, 0, 0.95); // desplaza el pivote a la raíz del ala
+    wingR = addTorso(wingGeo, matDark, -0.1, bodyY + 0.15, 0.15);
+    wingR.rotation.x = -0.15;
+    const wingGeoL = wingGeo.clone();
+    wingL = addTorso(wingGeoL, matDark, -0.1, bodyY + 0.15, -0.15);
+    wingL.scale.z = -1;
+    wingL.rotation.x = 0.15;
+  }
+
+  // --- Brazos pequeños (cazadores bípedos: Rex y Velocirraptor) ---
+  if (variant === 'rex' || variant === 'raptor') {
+    [0.32, -0.32].forEach((zSide) => {
+      const arm = addTorso(new THREE.CylinderGeometry(0.07, 0.09, 0.5, 5), matDark, 0.4, bodyY - 0.2, zSide);
+      arm.rotation.z = 0.5;
+      arm.rotation.x = zSide > 0 ? -0.3 : 0.3;
+    });
+  }
+
+  // --- Ornamentos traseros según especie (sobre el lomo, claramente por encima del cuerpo) ---
+  const backY = bodyY + 0.55;
+  if (variant === 'rex') {
+    const spikes = ornamentCount(detail, 3, 6);
+    for (let i = 0; i < spikes; i++) {
+      const sx = 0.45 - (i * 1.3) / spikes;
+      addTorso(new THREE.ConeGeometry(0.13, 0.4, 4), matDark, sx, backY, 0);
+    }
+  } else if (variant === 'giant') {
+    const plates = ornamentCount(detail, 4, 6);
+    for (let i = 0; i < plates; i++) {
+      const t = i / (plates - 1);
+      const px = 0.55 - t * 1.5;
+      const s = 0.28 + Math.sin(t * Math.PI) * 0.22;
+      const plate = addTorso(new THREE.ConeGeometry(s, s * 1.4, 4), matDark, px, backY + s * 0.3, 0);
+      plate.rotation.y = Math.PI / 4;
+    }
+  } else if (variant === 'medium' || variant === 'trike') {
+    // Gola/frill: mucho más grande y prominente en el triceratops, como en la realidad
+    const frillSegs = ornamentCount(detail, 3, 5) + (variant === 'trike' ? 2 : 0);
+    const frillScale = variant === 'trike' ? 1.7 : 1;
+    for (let i = 0; i < frillSegs; i++) {
+      const t = i / (frillSegs - 1) - 0.5; // -0.5..0.5
+      const petal = addTorso(
+        new THREE.BoxGeometry(0.55 * frillScale, 0.6 * frillScale, 0.06), matDark,
+        0.55, backY - 0.05, t * 0.95 * frillScale
+      );
+      petal.rotation.y = t * 1.1;
+      petal.rotation.x = -0.35;
+    }
+  } else if (variant === 'raptor') {
+    // Hilera de plumas/púas finas, más discretas que las espinas del Rex
+    const quills = ornamentCount(detail, 4, 7);
+    for (let i = 0; i < quills; i++) {
+      const sx = 0.4 - (i * 1.3) / quills;
+      addTorso(new THREE.ConeGeometry(0.06, 0.22, 4), matDark, sx, backY - 0.1, 0);
+    }
+  } else if (isFlyer) {
+    // Cresta ósea detrás de la cabeza, característica del Pteranodon
+    const crest = addTorso(new THREE.ConeGeometry(0.16, 1.0, 4), matDark, 1.3, bodyY + 0.85, 0);
+    crest.rotation.z = -1.85;
+  }
+
+  // --- Cuello (solo el volador): separa visualmente la cabeza del cuerpo, como un pterosaurio ---
+  if (isFlyer) {
+    const neck = addTorso(new THREE.CylinderGeometry(0.22, 0.32, 0.75, 6), matBody, 0.9, bodyY + 0.35, 0);
+    neck.rotation.z = -0.9;
+  }
+
+  // --- Cabeza: claramente por delante del cuerpo, no enterrada dentro de él ---
+  const headScale = variant === 'small' ? 0.85 : variant === 'giant' ? 0.95 : variant === 'raptor' ? 0.85 : isQuad ? 1.15 : 1.05;
+  const headX = isFlyer ? 1.75 : isQuad ? 1.25 : 1.35;
+  const headY = isFlyer ? bodyY + 0.75 : bodyY + 0.1;
+  const head = addTorso(new THREE.SphereGeometry(0.55, 10, 8), matBody, headX, headY, 0);
+  head.scale.set(headScale, headScale, headScale);
+  if (isFlyer) head.scale.x *= 0.75; // cabeza/pico más alargados hacia adelante
+  if (variant === 'raptor') head.scale.x *= 1.15; // hocico más afilado
+
+  // Cuerno nasal (medium, tipo ceratopsio) o par de cuernos + cuerno nasal (triceratops)
+  if (variant === 'medium') {
+    const horn = addTorso(new THREE.ConeGeometry(0.15, 0.5, 5), matLight, headX + 0.55 * headScale, headY, 0);
+    horn.rotation.z = -Math.PI / 2;
+  } else if (variant === 'trike') {
+    const noseHorn = addTorso(new THREE.ConeGeometry(0.13, 0.4, 5), matLight, headX + 0.5 * headScale, headY - 0.05, 0);
+    noseHorn.rotation.z = -Math.PI / 2;
+    [0.22, -0.22].forEach((zSide) => {
+      const browHorn = addTorso(new THREE.ConeGeometry(0.1, 0.65, 5), matLight, headX + 0.1, headY + 0.35, zSide);
+      browHorn.rotation.z = -1.05;
+      browHorn.rotation.y = zSide > 0 ? 0.3 : -0.3;
+    });
+  }
+
+  // Mandíbula/hocico (pico alargado y sin dientes en el volador)
+  addTorso(new THREE.BoxGeometry(isFlyer ? 0.85 : 0.55, 0.2, isFlyer ? 0.2 : 0.34), matDark, headX + (isFlyer ? 0.65 : 0.45) * headScale, headY - 0.2, 0);
+
+  // Dientes (depredadores bípedos y el gigante)
+  if (variant === 'rex' || variant === 'giant' || variant === 'raptor') {
+    const teeth = ornamentCount(detail, 2, 4);
+    for (let i = 0; i < teeth; i++) {
+      const tx = headX + 0.3 * headScale + i * 0.16;
+      const tooth = addTorso(new THREE.ConeGeometry(0.05, 0.16, 4), matWhite, tx, headY - 0.12, 0.1);
+      tooth.rotation.x = Math.PI;
+      const tooth2 = addTorso(new THREE.ConeGeometry(0.05, 0.16, 4), matWhite, tx, headY - 0.12, -0.1);
+      tooth2.rotation.x = Math.PI;
+    }
+  }
+
+  // Ojos (a ambos lados, esclera blanca + pupila)
+  [0.26, -0.26].forEach((zSide) => {
+    addTorso(new THREE.SphereGeometry(0.13, 8, 6), matWhite, headX + 0.2, headY + 0.15, zSide * headScale);
+    addTorso(new THREE.SphereGeometry(0.065, 6, 6), matEyeBlack, headX + 0.27, headY + 0.15, zSide * 0.85 * headScale);
+  });
+
+  // Fosas nasales
+  [0.12, -0.12].forEach((zSide) => {
+    addTorso(new THREE.SphereGeometry(0.045, 5, 4), matDark, headX + 0.5 * headScale, headY + 0.1, zSide * headScale);
+  });
+
+  // Manchas de piel (decorativas, posiciones fijas por especie)
+  const spotMat = matDark.clone();
+  spotMat.transparent = true;
+  spotMat.opacity = 0.35;
+  const spotCount = variant === 'small' ? 2 : 4;
+  for (let i = 0; i < spotCount; i++) {
+    const sx = Math.sin(i * 2.4) * 0.45;
+    const sz = Math.cos(i * 1.7) * 0.45;
+    addTorso(new THREE.SphereGeometry(0.14, 5, 4), spotMat, sx, bodyY + Math.sin(i) * 0.1, sz).scale.set(1, 0.4, 1);
+  }
+
+  return { group, legL, legR, legFL, legFR, wingL, wingR };
+}
+
+function buildPickupMesh() {
+  const group = new THREE.Group();
+  const gemMat = new THREE.MeshStandardMaterial({
+    color: POWERUP.color, flatShading: true, emissive: POWERUP.color, emissiveIntensity: 0.35
+  });
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), gemMat);
+  gem.castShadow = true;
+  group.add(gem);
+
+  const haloMat = new THREE.MeshBasicMaterial({ color: POWERUP.color, transparent: true, opacity: 0.25 });
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(1.9, 8, 6), haloMat);
+  group.add(halo);
+
+  return { group, gem, halo };
+}
+
+// ================================================================
+// ESTADO GLOBAL DEL JUEGO
+// ================================================================
+let player, enemies, particles, floatingTexts, pickups, shockwaves;
+let score, running, gameTime, spawnTimer, invulnTimer, pickupTimer;
+let highScore = 0;
+let comboCount = 0, comboTimer = 0;
+let dashTimer = 0, dashCooldownTimer = 0;
+let shakeTime = 0, shakeMag = 0;
+let wantDash = false; // se activa una vez por pulsación de ESPACIO/botón de mordisco
+const MAX_ENEMIES = 20;
+const MAX_LIVES = 3;
+const COMBO_WINDOW = 2.2; // segundos para mantener viva una racha de combo
+
+const keys = {}; // registro de teclas presionadas
+
+// Pool fijo de esferas para la estela del jugador (se reutilizan cada frame)
+const TRAIL_LENGTH = 10;
+const trailPool = [];
+for (let i = 0; i < TRAIL_LENGTH; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: '#7CFC7C', transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 6, 5), mat);
+  mesh.visible = false;
+  scene.add(mesh);
+  trailPool.push(mesh);
+}
+
+function clearDynamicSceneObjects() {
+  if (player && player.mesh) { disposeObject3D(player.mesh.group); scene.remove(player.mesh.group); }
+  for (const e of (enemies || [])) { disposeObject3D(e.mesh.group); scene.remove(e.mesh.group); }
+  for (const p of (pickups || [])) { disposeObject3D(p.mesh.group); scene.remove(p.mesh.group); }
+  for (const p of (particles || [])) { disposeObject3D(p.mesh); scene.remove(p.mesh); }
+  for (const s of (shockwaves || [])) { disposeObject3D(s.mesh); scene.remove(s.mesh); }
+  for (const t of (floatingTexts || [])) { t.el.remove(); }
+}
+
+function rebuildPlayerMesh() {
+  if (player.mesh) { disposeObject3D(player.mesh.group); scene.remove(player.mesh.group); }
+  const levelDef = PLAYER_LEVELS[player.level];
+  // El nivel máximo (volador) usa una silueta compartida; los niveles 1-3 usan la especie elegida
+  const variant = player.level === MAX_LEVEL ? 'flyer' : SPECIES[selectedSpecies].variant;
+  player.mesh = buildDinoGroup(levelDef, variant, player.level);
+  player.mesh.group.scale.setScalar(levelDef.radius);
+  const dashLight = new THREE.PointLight(0xff5252, 0, 8);
+  dashLight.position.set(0, 1.5, 0);
+  player.mesh.group.add(dashLight);
+  player.mesh.dashLight = dashLight;
+  scene.add(player.mesh.group);
+  trailPool.forEach((m) => m.material.color.set(levelDef.color));
+}
+
+function initGame() {
+  PLAYER_LEVELS = buildPlayerLevels(selectedSpecies);
+  clearDynamicSceneObjects();
+  player = {
+    x: ARENA_WIDTH / 2,
+    y: ARENA_DEPTH / 2,
+    vx: 0, vy: 0,
+    level: 1,
+    xp: 0,
+    lives: MAX_LIVES,
+    angle: 0,
+    trail: [],
+    mesh: null
+  };
+  rebuildPlayerMesh();
+  enemies = [];
+  particles = [];
+  floatingTexts = [];
+  pickups = [];
+  shockwaves = [];
+  score = 0;
+  gameTime = 0;
+  spawnTimer = 0;
+  invulnTimer = 0;
+  pickupTimer = rand(6, 10);
+  comboCount = 0;
+  comboTimer = 0;
+  dashTimer = 0;
+  dashCooldownTimer = 0;
+  shakeTime = 0;
+  shakeMag = 0;
+  highScore = getHighScore();
+  running = true;
+  updateHUD();
+}
+
+// ================================================================
+// ENTRADA DE TECLADO
+// ================================================================
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === ' ' && !keys[k]) wantDash = true; // solo se activa en el flanco de bajada de la tecla
+  keys[k] = true;
+});
+window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+function getInputVector() {
+  // El joystick táctil, si está activo, tiene prioridad sobre el teclado
+  if (touchVector.dx !== 0 || touchVector.dy !== 0) return { dx: touchVector.dx, dy: touchVector.dy };
+
+  let dx = 0, dy = 0;
+  if (keys['arrowup']    || keys['w']) dy -= 1;
+  if (keys['arrowdown']  || keys['s']) dy += 1;
+  if (keys['arrowleft']  || keys['a']) dx -= 1;
+  if (keys['arrowright'] || keys['d']) dx += 1;
+  // Normalizar para que la diagonal no sea más rápida
+  const len = Math.hypot(dx, dy);
+  if (len > 0) { dx /= len; dy /= len; }
+  return { dx, dy };
+}
+
+// ================================================================
+// CONTROLES TÁCTILES (joystick virtual + botón de mordisco especial)
+// ================================================================
+let touchVector = { dx: 0, dy: 0 };
+let joystickTouchId = null;
+
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  document.body.classList.add('touch-device');
+}
+
+function positionJoystickBase(clientX, clientY) {
+  const rect = container.getBoundingClientRect();
+  joystickBase.style.left = (clientX - rect.left) + 'px';
+  joystickBase.style.top = (clientY - rect.top) + 'px';
+  joystickBase.style.opacity = 1;
+}
+
+function updateJoystick(clientX, clientY) {
+  const baseRect = joystickBase.getBoundingClientRect();
+  const centerX = baseRect.left + baseRect.width / 2;
+  const centerY = baseRect.top + baseRect.height / 2;
+  let dx = clientX - centerX, dy = clientY - centerY;
+  const maxDist = baseRect.width / 2;
+  const d = Math.hypot(dx, dy);
+  if (d > maxDist) { dx = (dx / d) * maxDist; dy = (dy / d) * maxDist; }
+  joystickThumb.style.left = `${50 + (dx / maxDist) * 50}%`;
+  joystickThumb.style.top = `${50 + (dy / maxDist) * 50}%`;
+  touchVector.dx = dx / maxDist;
+  touchVector.dy = dy / maxDist;
+}
+
+function resetJoystick() {
+  joystickTouchId = null;
+  touchVector.dx = 0; touchVector.dy = 0;
+  joystickThumb.style.left = '50%';
+  joystickThumb.style.top = '50%';
+  joystickBase.style.opacity = 0;
+}
+
+joystickZone.addEventListener('touchstart', (e) => {
+  const t = e.changedTouches[0];
+  joystickTouchId = t.identifier;
+  positionJoystickBase(t.clientX, t.clientY);
+  updateJoystick(t.clientX, t.clientY);
+  e.preventDefault();
+}, { passive: false });
+
+joystickZone.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystickTouchId) updateJoystick(t.clientX, t.clientY);
+  }
+  e.preventDefault();
+}, { passive: false });
+
+function handleJoystickEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystickTouchId) resetJoystick();
+  }
+}
+joystickZone.addEventListener('touchend', handleJoystickEnd);
+joystickZone.addEventListener('touchcancel', handleJoystickEnd);
+
+biteButton.addEventListener('touchstart', (e) => { e.preventDefault(); wantDash = true; }, { passive: false });
+
+// ================================================================
+// GENERACIÓN DE ENEMIGOS
+// ================================================================
+function pickEnemyType() {
+  // La dificultad aumenta con el tiempo: más medianos/gigantes según avanza la partida
+  const difficulty = clamp(gameTime / 60, 0, 1); // 0 al inicio, 1 tras 60s
+  const weights = {
+    small:  0.6 - 0.25 * difficulty,
+    medium: 0.3 + 0.05 * difficulty,
+    giant:  0.1 + 0.20 * difficulty
+  };
+  const total = weights.small + weights.medium + weights.giant;
+  let r = Math.random() * total;
+  if (r < weights.small) return 'small';
+  r -= weights.small;
+  if (r < weights.medium) return 'medium';
+  return 'giant';
+}
+
+function spawnEnemy() {
+  const typeKey = pickEnemyType();
+  const def = ENEMY_TYPES[typeKey];
+
+  // Elegir un borde aleatorio del área de juego (0=norte,1=este,2=sur,3=oeste)
+  const edge = Math.floor(rand(0, 4));
+  let x, y;
+  const margin = def.radius + 2;
+  switch (edge) {
+    case 0: x = rand(0, ARENA_WIDTH); y = -margin; break;
+    case 1: x = ARENA_WIDTH + margin; y = rand(0, ARENA_DEPTH); break;
+    case 2: x = rand(0, ARENA_WIDTH); y = ARENA_DEPTH + margin; break;
+    default: x = -margin; y = rand(0, ARENA_DEPTH); break;
+  }
+
+  // Dirección aleatoria, con leve tendencia hacia el centro del área
+  // para asegurar que crucen la zona de juego en lugar de bordearla.
+  const toCenterAngle = Math.atan2(ARENA_DEPTH / 2 - y, ARENA_WIDTH / 2 - x);
+  const angle = toCenterAngle + rand(-0.9, 0.9);
+
+  const mesh = buildDinoGroup(def, def.variant, def.level);
+  mesh.group.scale.setScalar(def.radius);
+  scene.add(mesh.group);
+
+  enemies.push({
+    type: typeKey,
+    x, y,
+    vx: Math.cos(angle) * def.speed,
+    vy: Math.sin(angle) * def.speed,
+    radius: def.radius,
+    wobble: rand(0, Math.PI * 2), // fase para animación de patas
+    angle: angle,
+    mesh
+  });
+}
+
+// Aparece en un punto aleatorio, lejos del borde, cada cierto tiempo
+function spawnPickup() {
+  const mesh = buildPickupMesh();
+  mesh.group.scale.setScalar(POWERUP.radius);
+  scene.add(mesh.group);
+  pickups.push({
+    x: rand(8, ARENA_WIDTH - 8),
+    y: rand(8, ARENA_DEPTH - 8),
+    radius: POWERUP.radius,
+    pulse: 0,
+    mesh
+  });
+}
+
+// ================================================================
+// EFECTOS: partículas, textos flotantes y ondas de choque
+// ================================================================
+function spawnEatEffect(x, y, color, label, big) {
+  const count = big ? 16 : 10;
+  for (let i = 0; i < count; i++) {
+    const a = rand(0, Math.PI * 2);
+    const speed = rand(1.5, big ? 6.5 : 4.5);
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 5, 4),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+    );
+    const radius = rand(0.12, big ? 0.32 : 0.24);
+    mesh.scale.setScalar(radius);
+    scene.add(mesh);
+    particles.push({
+      x, y, height: 1.2 + rand(0, 0.6),
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      vHeight: rand(1.5, 3.5),
+      life: rand(0.4, 0.8),
+      maxLife: 0.8,
+      radius,
+      mesh
+    });
+  }
+  if (label) spawnFloatingText(x, y, label);
+
+  const maxRadius = big ? 3.6 : 2.2;
+  const ringMesh = new THREE.Mesh(
+    new THREE.RingGeometry(0.75, 1, 24),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+  );
+  ringMesh.rotation.x = -Math.PI / 2;
+  ringMesh.position.set(worldX(x), 0.06, worldZ(y));
+  scene.add(ringMesh);
+  shockwaves.push({ x, y, radius: 0.3, maxRadius, life: 0.4, maxLife: 0.4, mesh: ringMesh });
+}
+
+function spawnFloatingText(x, y, text) {
+  const el = document.createElement('div');
+  el.className = 'world-label';
+  el.textContent = text;
+  container.appendChild(el);
+  floatingTexts.push({ x, y, height: 2.4, vHeight: 2.6, life: 1.3, el });
+}
+
+// ================================================================
+// LÓGICA DE ACTUALIZACIÓN (llamada cada frame)
+// ================================================================
+function update(dt) {
+  gameTime += dt;
+  spawnTimer -= dt;
+  pickupTimer -= dt;
+
+  // --- Ritmo de aparición de enemigos (se acelera con el tiempo) ---
+  const spawnInterval = clamp(1.1 - gameTime * 0.01, 0.35, 1.1);
+  if (spawnTimer <= 0 && enemies.length < MAX_ENEMIES) {
+    spawnEnemy();
+    spawnTimer = spawnInterval;
+  }
+
+  // --- Aparición periódica de la comida especial (power-up) ---
+  if (pickupTimer <= 0 && pickups.length < 2) {
+    spawnPickup();
+    pickupTimer = rand(7, 12);
+  }
+
+  // --- Habilidad especial: Mordisco Feroz ---
+  if (dashCooldownTimer > 0) dashCooldownTimer -= dt;
+  if (dashTimer > 0) dashTimer -= dt;
+  if (wantDash && dashCooldownTimer <= 0) {
+    dashTimer = DASH_DURATION;
+    dashCooldownTimer = DASH_COOLDOWN;
+    sfxDash();
+    shakeTime = 0.15; shakeMag = 0.15;
+  }
+  wantDash = false;
+  const dashActive = dashTimer > 0;
+  if (player.mesh.dashLight) {
+    player.mesh.dashLight.intensity = dashActive ? 1.8 + Math.sin(gameTime * 20) * 0.6 : 0;
+  }
+
+  // --- Combo: la racha se rompe si pasa demasiado tiempo sin comer ---
+  if (comboTimer > 0) {
+    comboTimer -= dt;
+    if (comboTimer <= 0) comboCount = 0;
+  }
+
+  // --- Movimiento del jugador ---
+  const levelDef = PLAYER_LEVELS[player.level];
+  const { dx, dy } = getInputVector();
+  const ACCEL = 60;
+  const FRICTION = 6;
+
+  player.vx += dx * ACCEL * dt;
+  player.vy += dy * ACCEL * dt;
+  // Fricción (frena progresivamente si no hay input)
+  player.vx -= player.vx * FRICTION * dt;
+  player.vy -= player.vy * FRICTION * dt;
+
+  const maxSpeed = levelDef.maxSpeed * (dashActive ? 1.5 : 1);
+  const speed = Math.hypot(player.vx, player.vy);
+  if (speed > maxSpeed) {
+    player.vx = (player.vx / speed) * maxSpeed;
+    player.vy = (player.vy / speed) * maxSpeed;
+  }
+
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  // Mantener al jugador dentro del área de juego
+  player.x = clamp(player.x, levelDef.radius, ARENA_WIDTH - levelDef.radius);
+  player.y = clamp(player.y, levelDef.radius, ARENA_DEPTH - levelDef.radius);
+
+  // --- Colisión con rocas (obstáculos sólidos): empuja al jugador fuera de la roca ---
+  for (const o of obstacles) {
+    const odx = player.x - o.x, ody = player.y - o.y;
+    const od = Math.hypot(odx, ody);
+    const minDist = levelDef.radius + o.radius;
+    if (od < minDist && od > 0.0001) {
+      const nx = odx / od, ny = ody / od;
+      player.x += nx * (minDist - od);
+      player.y += ny * (minDist - od);
+      // Anular la componente de velocidad que apunta hacia la roca (desliza en vez de rebotar)
+      const inward = Math.min(0, player.vx * nx + player.vy * ny);
+      player.vx -= nx * inward;
+      player.vy -= ny * inward;
+    }
+  }
+
+  if (speed > 0.5) {
+    const targetAngle = Math.atan2(-player.vy, player.vx);
+    player.angle += shortestAngleDelta(targetAngle, player.angle) * clamp(dt * 8, 0, 1);
+  }
+
+  // --- Rastro de movimiento (estela detrás del jugador) ---
+  player.trail.push({ x: player.x, y: player.y });
+  if (player.trail.length > TRAIL_LENGTH) player.trail.shift();
+
+  if (invulnTimer > 0) invulnTimer -= dt;
+
+  // --- Movimiento de enemigos + eliminación fuera del área ---
+  const margin = 14;
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    e.wobble += dt * 6;
+
+    if (e.x < -margin || e.x > ARENA_WIDTH + margin || e.y < -margin || e.y > ARENA_DEPTH + margin) {
+      disposeObject3D(e.mesh.group);
+      scene.remove(e.mesh.group);
+      enemies.splice(i, 1);
+      continue;
+    }
+
+    // --- Colisión con el jugador ---
+    const d = dist(player, e);
+    if (d < levelDef.radius + e.radius) {
+      const enemyDef = ENEMY_TYPES[e.type];
+      // El Mordisco Feroz permite comer un nivel por encima del propio
+      const canEat = enemyDef.level <= player.level + (dashActive ? 1 : 0);
+
+      if (canEat) {
+        registerEat(enemyDef.points, enemyDef.xp, e.x, e.y, enemyDef.color, enemyDef.radius > 1.8);
+        disposeObject3D(e.mesh.group);
+        scene.remove(e.mesh.group);
+        enemies.splice(i, 1);
+      } else if (invulnTimer <= 0) {
+        // El enemigo es más grande: el jugador recibe daño
+        takeDamage(e);
+      }
+    }
+  }
+
+  // --- Power-ups (comida especial): sin riesgo, cualquier nivel la puede comer ---
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    const p = pickups[i];
+    p.pulse += dt * 4;
+    if (dist(player, p) < levelDef.radius + p.radius) {
+      registerEat(POWERUP.points, POWERUP.xp, p.x, p.y, POWERUP.color, true);
+      sfxPowerUp();
+      disposeObject3D(p.mesh.group);
+      scene.remove(p.mesh.group);
+      pickups.splice(i, 1);
+    }
+  }
+
+  // --- Partículas ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vHeight -= dt * 6; // gravedad simple para un arco natural
+    p.height += p.vHeight * dt;
+    p.vx *= 0.9; p.vy *= 0.9;
+    p.life -= dt;
+    if (p.life <= 0 || p.height < 0) {
+      disposeObject3D(p.mesh);
+      scene.remove(p.mesh);
+      particles.splice(i, 1);
+    }
+  }
+
+  // --- Ondas de choque al comer ---
+  for (let i = shockwaves.length - 1; i >= 0; i--) {
+    const s = shockwaves[i];
+    s.life -= dt;
+    s.radius += (s.maxRadius - s.radius) * dt * 8;
+    if (s.life <= 0) {
+      disposeObject3D(s.mesh);
+      scene.remove(s.mesh);
+      shockwaves.splice(i, 1);
+    }
+  }
+
+  // --- Textos flotantes (+XP) ---
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const t = floatingTexts[i];
+    t.vHeight -= dt * 1.5;
+    t.height += t.vHeight * dt;
+    t.life -= dt;
+    if (t.life <= 0) {
+      t.el.remove();
+      floatingTexts.splice(i, 1);
+    }
+  }
+
+  // --- Temblor de cámara (decae con el tiempo) ---
+  if (shakeTime > 0) shakeTime -= dt;
+
+  // --- Desvanecer el flash de daño ---
+  if (invulnTimer > 0) {
+    damageFlash.style.opacity = Math.min(1, invulnTimer * 1.5) * 0.35;
+  } else {
+    damageFlash.style.opacity = 0;
+  }
+
+  updateAbilityHUD(dashActive);
+}
+
+// Centraliza lo que ocurre al comer algo: combo, puntos con multiplicador, XP, efectos y sonido
+function registerEat(basePoints, baseXp, x, y, color, big) {
+  comboCount = comboTimer > 0 ? comboCount + 1 : 1;
+  comboTimer = COMBO_WINDOW;
+  const multiplier = 1 + Math.min(comboCount - 1, 4) * 0.25; // hasta x2 con racha de 5+
+
+  const points = Math.round(basePoints * multiplier);
+  score += points;
+  gainXP(Math.round(baseXp * multiplier));
+  spawnEatEffect(x, y, color, `+${points}`, big);
+  sfxBite();
+  if (comboCount >= 2) sfxCombo();
+
+  shakeTime = Math.max(shakeTime, big ? 0.12 : 0.06);
+  shakeMag = big ? 0.22 : 0.1;
+
+  updateComboUI(multiplier);
+}
+
+// ================================================================
+// XP, SUBIDA DE NIVEL Y DAÑO
+// ================================================================
+function gainXP(amount) {
+  player.xp += amount;
+  const levelDef = PLAYER_LEVELS[player.level];
+  if (player.level < MAX_LEVEL && player.xp >= levelDef.xpToNext) {
+    player.xp -= levelDef.xpToNext;
+    player.level++;
+    sfxLevelUp();
+    spawnFloatingText(player.x, player.y, `¡EVOLUCIÓN! Nivel ${player.level}`);
+    rebuildPlayerMesh();
+    spawnEatEffect(player.x, player.y, PLAYER_LEVELS[player.level].color, '');
+  }
+  updateHUD();
+}
+
+function takeDamage(enemy) {
+  player.lives--;
+  invulnTimer = 1.5; // segundos de invulnerabilidad tras el golpe
+  comboCount = 0; comboTimer = 0; // recibir daño rompe la racha de combo
+  shakeTime = 0.35; shakeMag = 0.5;
+  sfxDamage();
+
+  // Empuje (knockback) alejando al jugador del enemigo agresor
+  const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+  player.vx += Math.cos(angle) * 14;
+  player.vy += Math.sin(angle) * 14;
+
+  updateHUD();
+
+  if (player.lives <= 0) {
+    endGame();
+  }
+}
+
+// ================================================================
+// INTERFAZ (HUD)
+// ================================================================
+function updateHUD() {
+  hudScore.textContent = score;
+  hudHighScore.textContent = Math.max(highScore, score);
+
+  const levelDef = PLAYER_LEVELS[player.level];
+  hudLevelNum.textContent = player.level;
+  hudLevelTitle.textContent = levelDef.title;
+
+  const pct = levelDef.xpToNext === Infinity ? 100 : (player.xp / levelDef.xpToNext) * 100;
+  hudXpFill.style.width = `${clamp(pct, 0, 100)}%`;
+
+  hudLivesPanel.innerHTML = '';
+  for (let i = 0; i < MAX_LIVES; i++) {
+    const span = document.createElement('span');
+    span.textContent = '❤';
+    span.className = 'heart' + (i < player.lives ? '' : ' lost');
+    hudLivesPanel.appendChild(span);
+  }
+}
+
+let comboHideTimeout = null;
+function updateComboUI(multiplier) {
+  if (comboCount >= 2) {
+    comboPanel.textContent = `🔥 COMBO x${comboCount}  (+${Math.round((multiplier - 1) * 100)}%)`;
+    comboPanel.classList.add('show');
+    clearTimeout(comboHideTimeout);
+    comboHideTimeout = setTimeout(() => comboPanel.classList.remove('show'), COMBO_WINDOW * 1000);
+  }
+}
+
+function updateAbilityHUD(dashActive) {
+  if (dashActive) {
+    dashPanel.classList.remove('ready');
+    dashBarFill.style.width = '100%';
+    dashBarFill.style.background = 'linear-gradient(90deg, #ff9d4d, #ff5252)';
+    document.getElementById('dash-label').textContent = '¡MORDISCO FEROZ ACTIVO!';
+  } else if (dashCooldownTimer > 0) {
+    dashPanel.classList.remove('ready');
+    const pct = 100 - (dashCooldownTimer / DASH_COOLDOWN) * 100;
+    dashBarFill.style.width = `${clamp(pct, 0, 100)}%`;
+    dashBarFill.style.background = 'linear-gradient(90deg, #4dd6ff, #7CFC7C)';
+    document.getElementById('dash-label').textContent = 'MORDISCO FEROZ — recargando';
+  } else {
+    dashPanel.classList.add('ready');
+    dashBarFill.style.width = '100%';
+    dashBarFill.style.background = 'linear-gradient(90deg, #4dd6ff, #7CFC7C)';
+    document.getElementById('dash-label').textContent = 'MORDISCO FEROZ — ESPACIO';
+  }
+}
+
+// ================================================================
+// SINCRONIZACIÓN DE LA ESCENA 3D (posiciones, animación, cámara)
+// ================================================================
+const projectionVector = new THREE.Vector3();
+function worldToScreen(x, y, z) {
+  projectionVector.set(x, y, z).project(camera);
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  return {
+    x: (projectionVector.x * 0.5 + 0.5) * w,
+    y: (-projectionVector.y * 0.5 + 0.5) * h,
+    behind: projectionVector.z > 1
+  };
+}
+
+function animateDino(entityMesh, wobble, radius, baseHeight) {
+  entityMesh.legL.rotation.x = Math.sin(wobble) * 0.5;
+  entityMesh.legR.rotation.x = Math.sin(wobble + Math.PI) * 0.5;
+  // Cuadrúpedos (triceratops): las patas delanteras se mueven en diagonal con las traseras opuestas
+  if (entityMesh.legFL) entityMesh.legFL.rotation.x = Math.sin(wobble + Math.PI) * 0.4;
+  if (entityMesh.legFR) entityMesh.legFR.rotation.x = Math.sin(wobble) * 0.4;
+  // Aleteo de alas (volador): oscilación más rápida que el ciclo de andar
+  if (entityMesh.wingL) {
+    const flap = Math.sin(wobble * 3) * 0.55;
+    entityMesh.wingL.rotation.x = 0.15 + flap;
+    entityMesh.wingR.rotation.x = -0.15 - flap;
+  }
+  entityMesh.group.position.y = (baseHeight || 0) + Math.sin(wobble) * radius * 0.05;
+}
+
+function syncScene(dt) {
+  const levelDef = PLAYER_LEVELS[player.level];
+
+  // --- Jugador ---
+  player.mesh.group.position.x = worldX(player.x);
+  player.mesh.group.position.z = worldZ(player.y);
+  player.mesh.group.rotation.y = player.angle;
+  const playerSpeed = Math.hypot(player.vx, player.vy);
+  const playerBaseHeight = levelDef.flying ? levelDef.flightHeight : 0;
+  animateDino(player.mesh, gameTime * 6 * clamp(playerSpeed / 3, 0.3, 1.6), levelDef.radius, playerBaseHeight);
+  const blinking = invulnTimer > 0 && Math.floor(invulnTimer * 10) % 2 === 0;
+  player.mesh.group.visible = !blinking;
+
+  // --- Enemigos ---
+  for (const e of enemies) {
+    e.mesh.group.position.x = worldX(e.x);
+    e.mesh.group.position.z = worldZ(e.y);
+    const targetAngle = Math.atan2(-e.vy, e.vx);
+    e.angle += shortestAngleDelta(targetAngle, e.angle) * clamp(dt * 6, 0, 1);
+    e.mesh.group.rotation.y = e.angle;
+    animateDino(e.mesh, e.wobble, e.radius);
+  }
+
+  // --- Power-ups (gemas pulsantes y rotando) ---
+  for (const p of pickups) {
+    p.mesh.group.position.set(worldX(p.x), 1.4 + Math.sin(p.pulse) * 0.15, worldZ(p.y));
+    p.mesh.gem.rotation.y += dt * 2;
+    p.mesh.gem.rotation.x += dt * 1.3;
+    const haloScale = 1 + Math.sin(p.pulse) * 0.15;
+    p.mesh.halo.scale.setScalar(haloScale);
+  }
+
+  // --- Partículas ---
+  for (const p of particles) {
+    p.mesh.position.set(worldX(p.x), p.height, worldZ(p.y));
+    p.mesh.material.opacity = clamp(p.life / p.maxLife, 0, 1);
+  }
+
+  // --- Ondas de choque ---
+  for (const s of shockwaves) {
+    s.mesh.scale.setScalar(s.radius);
+    s.mesh.material.opacity = clamp(s.life / s.maxLife, 0, 1) * 0.6;
+  }
+
+  // --- Textos flotantes (proyectados de mundo 3D a pantalla) ---
+  for (const t of floatingTexts) {
+    const screen = worldToScreen(worldX(t.x), t.height, worldZ(t.y));
+    t.el.style.left = `${screen.x}px`;
+    t.el.style.top = `${screen.y}px`;
+    t.el.style.opacity = screen.behind ? 0 : clamp(t.life, 0, 1);
+  }
+
+  // --- Estela del jugador (pool fijo de esferas) ---
+  for (let i = 0; i < TRAIL_LENGTH; i++) {
+    const mesh = trailPool[i];
+    const point = player.trail[i];
+    if (!point) { mesh.visible = false; continue; }
+    const frac = i / TRAIL_LENGTH;
+    mesh.visible = true;
+    mesh.position.set(worldX(point.x), 0.3, worldZ(point.y));
+    mesh.scale.setScalar(levelDef.radius * (0.4 + 0.5 * frac));
+    mesh.material.opacity = frac * 0.25;
+  }
+
+  // --- Nubes (parallax lento) ---
+  for (const cluster of cloudClusters) {
+    cluster.position.x += cluster.userData.speed * dt;
+    if (cluster.position.x > ARENA_WIDTH * 1.3) cluster.position.x = -ARENA_WIDTH * 1.3;
+  }
+
+  // --- Cámara en tercera persona, sigue al jugador con temblor de pantalla ---
+  // Ángulo más bajo/lateral (en vez de cenital) para que se vean bien las patas,
+  // la cabeza y la cola en lugar de solo el lomo del dinosaurio.
+  const camHeight = 8 + player.level * 1.4 + (levelDef.flying ? levelDef.flightHeight : 0);
+  const camDist = 15 + player.level * 2;
+  const targetCamX = player.mesh.group.position.x;
+  const targetCamZ = player.mesh.group.position.z + camDist;
+  camera.position.x += (targetCamX - camera.position.x) * clamp(dt * 4, 0, 1);
+  camera.position.z += (targetCamZ - camera.position.z) * clamp(dt * 4, 0, 1);
+  camera.position.y += (camHeight - camera.position.y) * clamp(dt * 4, 0, 1);
+  if (shakeTime > 0) {
+    camera.position.x += rand(-shakeMag, shakeMag);
+    camera.position.y += rand(-shakeMag, shakeMag);
+  }
+  camera.lookAt(player.mesh.group.position.x, 1.5 + (levelDef.flying ? levelDef.flightHeight : 0), player.mesh.group.position.z);
+}
+
+// ================================================================
+// BUCLE PRINCIPAL DEL JUEGO
+// ================================================================
+let lastTime = 0;
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05); // dt en segundos, limitado
+  lastTime = timestamp;
+
+  if (running) {
+    update(dt);
+    syncScene(dt);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(gameLoop);
+}
+
+// ================================================================
+// GAME OVER / REINICIO
+// ================================================================
+function endGame() {
+  running = false;
+  const isNewRecord = saveHighScoreIfBeaten(score);
+  highScore = getHighScore();
+  finalScoreEl.textContent = `Puntuación final: ${score}`;
+  finalLevelEl.textContent = `Nivel alcanzado: ${player.level} (${PLAYER_LEVELS[player.level].title})`;
+  finalHighScoreEl.textContent = isNewRecord ? `🏆 ¡Nuevo récord! ${highScore}` : `Récord: ${highScore}`;
+  gameOverScreen.classList.remove('hidden');
+}
+
+function restartGame() {
+  gameOverScreen.classList.add('hidden');
+  initGame();
+}
+
+// ================================================================
+// EVENTOS DE BOTONES Y ARRANQUE
+// ================================================================
+speciesCards.forEach((card) => {
+  card.addEventListener('click', () => {
+    selectedSpecies = card.dataset.species;
+    speciesCards.forEach((c) => c.classList.toggle('selected', c === card));
+  });
+});
+
+startBtn.addEventListener('click', () => {
+  initAudio(); // el primer gesto del usuario habilita el audio del navegador
+  startScreen.classList.add('hidden');
+  initGame();
+});
+restartBtn.addEventListener('click', restartGame);
+changeSpeciesBtn.addEventListener('click', () => {
+  gameOverScreen.classList.add('hidden');
+  startScreen.classList.remove('hidden');
+});
+muteBtn.addEventListener('click', toggleMute);
+
+// Estado inicial: el juego no corre hasta pulsar "Comenzar"
+running = false;
+player = { x: ARENA_WIDTH / 2, y: ARENA_DEPTH / 2, vx: 0, vy: 0, level: 1, xp: 0, lives: MAX_LIVES, angle: 0, trail: [], mesh: null };
+rebuildPlayerMesh();
+enemies = []; particles = []; floatingTexts = []; pickups = []; shockwaves = []; score = 0;
+highScore = getHighScore();
+startHighScoreEl.textContent = `Récord actual: ${highScore}`;
+updateHUD();
+
+camera.position.set(0, 9, 17);
+camera.lookAt(0, 1.5, 0);
+
+requestAnimationFrame(gameLoop);
+
+// Registro del service worker (PWA instalable). Requiere HTTPS o localhost:
+// no funcionará abriendo el archivo directamente (file://) ni por IP local sin HTTPS.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
