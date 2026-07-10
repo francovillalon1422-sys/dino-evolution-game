@@ -513,6 +513,18 @@
   </div>
 </div>
 
+<!-- Mapa de importación: los loaders de three.js (GLTFLoader, SkeletonUtils) usan
+     internamente "import ... from 'three'" (especificador simple), que el navegador
+     solo puede resolver si existe este mapa. Debe ir antes del <script type="module">. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
 <script type="module">
 /* ================================================================
    REX EVOLUTION 3D
@@ -520,7 +532,9 @@
    código abierto. Todo el arte 3D es geometría primitiva de bajo poli
    generada por código, no se usan modelos ni texturas de pago.
    ================================================================ */
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 // ---------- Referencias a elementos del DOM ----------
 const canvas = document.getElementById('gameCanvas');
@@ -577,6 +591,23 @@ function disposeObject3D(root) {
       mats.forEach((m) => m.dispose());
     }
   });
+}
+
+// Los modelos 3D reales comparten la geometría con la caché precargada (nunca se
+// debe liberar); solo se liberan los materiales, que sí se clonan por instancia.
+function disposePlayerMesh(mesh) {
+  if (!mesh) return;
+  if (mesh.isRealModel) {
+    mesh.group.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((m) => m.dispose());
+      }
+    });
+  } else {
+    disposeObject3D(mesh.group);
+  }
+  scene.remove(mesh.group);
 }
 
 // ================================================================
@@ -990,6 +1021,101 @@ const DASH_DURATION = 1.3;
 const DASH_COOLDOWN = 9;
 
 // ================================================================
+// MODELOS 3D REALES (Quaternius, licencia CC0 — dominio público, poly.pizza)
+// Se usan solo para las 3 especies jugables; enemigos y la evolución voladora
+// siguen usando la geometría generada por código (ver más abajo). Si por algún
+// motivo no cargan (sin conexión, error de red), se cae de vuelta al modelo
+// generado por código automáticamente — el juego nunca se rompe por esto.
+// ================================================================
+const REAL_MODEL_CONFIG = {
+  rex:    { url: 'models/T-Rex.glb', facingOffset: Math.PI / 2 },
+  raptor: { url: 'models/Velociraptor.glb', facingOffset: Math.PI / 2 },
+  trike:  { url: 'models/Triceratops.glb', facingOffset: Math.PI / 2 }
+};
+const TARGET_MODEL_HEIGHT = 1.6; // altura "unitaria" antes de escalar por el radio de cada nivel
+
+const realModelCache = {}; // variant -> { scene, animations, normalizeScale, groundOffset }
+const gltfLoader = new GLTFLoader();
+let realModelsReady = false;
+
+function loadRealModel(variant) {
+  const cfg = REAL_MODEL_CONFIG[variant];
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(cfg.url, (gltf) => {
+      // Importante: recién cargado, las matrices de la jerarquía (huesos incluidos)
+      // todavía no se han calculado (siguen en su valor inicial); sin esto, Box3
+      // da un tamaño completamente incorrecto.
+      gltf.scene.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const normalizeScale = TARGET_MODEL_HEIGHT / Math.max(size.y, 0.001);
+      realModelCache[variant] = {
+        scene: gltf.scene,
+        animations: gltf.animations,
+        normalizeScale,
+        groundOffset: -box.min.y * normalizeScale
+      };
+      resolve();
+    }, undefined, reject);
+  });
+}
+
+function preloadRealModels() {
+  return Promise.all(Object.keys(REAL_MODEL_CONFIG).map(loadRealModel));
+}
+preloadRealModels()
+  .then(() => { realModelsReady = true; })
+  .catch((err) => { console.warn('No se pudieron cargar los modelos 3D reales, se usará el modelo generado por código.', err); });
+
+// Recolorea un material preservando su luminosidad original (para que la sombra/luz
+// del modelo no se pierda) pero adoptando el tono e intensidad del color de skin elegido.
+function tintMaterialToward(material, targetHex) {
+  if (!material || !material.color) return;
+  const targetHSL = {};
+  new THREE.Color(targetHex).getHSL(targetHSL);
+  const matHSL = {};
+  material.color.getHSL(matHSL);
+  material.color.setHSL(targetHSL.h, targetHSL.s, matHSL.l);
+}
+
+// Clona el modelo real cacheado, aplica animación de caminar y (si corresponde) el tinte de skin
+function buildRealPlayerModel(variant, radius, skinConfig) {
+  const cached = realModelCache[variant];
+  const group = new THREE.Group();
+  const modelRoot = cloneSkinned(cached.scene);
+  modelRoot.scale.setScalar(cached.normalizeScale);
+  modelRoot.position.y = cached.groundOffset;
+  modelRoot.rotation.y = REAL_MODEL_CONFIG[variant].facingOffset;
+
+  modelRoot.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      // Clonar el material por instancia: nunca mutar el material compartido de la
+      // caché (si no, el tinte de un skin se filtraría a todos los clones futuros).
+      child.material = Array.isArray(child.material) ? child.material.map((m) => m.clone()) : child.material.clone();
+      if (skinConfig && skinConfig.colors) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => tintMaterialToward(mat, skinConfig.colors.color));
+      }
+    }
+  });
+  group.add(modelRoot);
+  group.scale.setScalar(radius);
+
+  const mixer = new THREE.AnimationMixer(modelRoot);
+  const walkClip = cached.animations.find((c) => c.name.toLowerCase().includes('walk')) || cached.animations[0];
+  let action = null;
+  if (walkClip) {
+    action = mixer.clipAction(walkClip);
+    action.play();
+  }
+
+  return { group, mixer, walkAction: action, isRealModel: true };
+}
+
+// ================================================================
 // CONSTRUCCIÓN DE MODELOS 3D (bajo poli, generados por código)
 // ================================================================
 // Sombreado suave (no facetado) para que los dinosaurios se lean como criaturas
@@ -1260,7 +1386,7 @@ for (let i = 0; i < TRAIL_LENGTH; i++) {
 }
 
 function clearDynamicSceneObjects() {
-  if (player && player.mesh) { disposeObject3D(player.mesh.group); scene.remove(player.mesh.group); }
+  if (player && player.mesh) disposePlayerMesh(player.mesh);
   for (const e of (enemies || [])) { disposeObject3D(e.mesh.group); scene.remove(e.mesh.group); }
   for (const p of (pickups || [])) { disposeObject3D(p.mesh.group); scene.remove(p.mesh.group); }
   for (const p of (particles || [])) { disposeObject3D(p.mesh); scene.remove(p.mesh); }
@@ -1269,12 +1395,17 @@ function clearDynamicSceneObjects() {
 }
 
 function rebuildPlayerMesh() {
-  if (player.mesh) { disposeObject3D(player.mesh.group); scene.remove(player.mesh.group); }
+  if (player.mesh) disposePlayerMesh(player.mesh);
   const levelDef = PLAYER_LEVELS[player.level];
   // El nivel máximo (volador) usa una silueta compartida; los niveles 1-3 usan la especie elegida
   const variant = player.level === MAX_LEVEL ? 'flyer' : SPECIES[selectedSpecies].variant;
-  player.mesh = buildDinoGroup(levelDef, variant, player.level);
-  player.mesh.group.scale.setScalar(levelDef.radius);
+
+  if (realModelsReady && REAL_MODEL_CONFIG[variant]) {
+    player.mesh = buildRealPlayerModel(variant, levelDef.radius, getSkinConfig(selectedSpecies));
+  } else {
+    player.mesh = buildDinoGroup(levelDef, variant, player.level);
+    player.mesh.group.scale.setScalar(levelDef.radius);
+  }
   const dashLight = new THREE.PointLight(0xff5252, 0, 8);
   dashLight.position.set(0, 1.5, 0);
   player.mesh.group.add(dashLight);
@@ -1652,9 +1783,13 @@ function update(dt) {
     player.angle += shortestAngleDelta(targetAngle, player.angle) * clamp(dt * 8, 0, 1);
   }
 
-  // --- Rastro de movimiento (estela detrás del jugador) ---
-  player.trail.push({ x: player.x, y: player.y });
-  if (player.trail.length > TRAIL_LENGTH) player.trail.shift();
+  // --- Rastro de movimiento (estela detrás del jugador, solo si se está moviendo) ---
+  if (speed > 0.6) {
+    player.trail.push({ x: player.x, y: player.y });
+    if (player.trail.length > TRAIL_LENGTH) player.trail.shift();
+  } else if (player.trail.length > 0) {
+    player.trail.shift(); // se desvanece progresivamente al detenerse
+  }
 
   if (invulnTimer > 0) invulnTimer -= dt;
 
@@ -1926,7 +2061,15 @@ function syncScene(dt) {
   player.mesh.group.rotation.y = player.angle;
   const playerSpeed = Math.hypot(player.vx, player.vy);
   const playerBaseHeight = levelDef.flying ? levelDef.flightHeight : 0;
-  animateDino(player.mesh, gameTime * 6 * clamp(playerSpeed / 3, 0.3, 1.6), levelDef.radius, playerBaseHeight);
+  if (player.mesh.isRealModel) {
+    // Los modelos reales traen su propia animación de caminata (mixer de three.js)
+    // en vez del balanceo de patas hecho a mano; solo ajustamos velocidad y altura.
+    if (player.mesh.walkAction) player.mesh.walkAction.timeScale = clamp(playerSpeed / 3, 0.4, 2.2);
+    player.mesh.mixer.update(dt);
+    player.mesh.group.position.y = playerBaseHeight;
+  } else {
+    animateDino(player.mesh, gameTime * 6 * clamp(playerSpeed / 3, 0.3, 1.6), levelDef.radius, playerBaseHeight);
+  }
   const blinking = invulnTimer > 0 && Math.floor(invulnTimer * 10) % 2 === 0;
   player.mesh.group.visible = !blinking;
 

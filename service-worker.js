@@ -1,7 +1,7 @@
 // Service worker de Rex Evolution 3D: cachea el "app shell" y las peticiones de red
 // (incluyendo el módulo de three.js del CDN) para que el juego funcione sin conexión
 // después de la primera carga.
-const CACHE_NAME = 'rex-evolution-v7';
+const CACHE_NAME = 'rex-evolution-v8';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,7 +9,10 @@ const APP_SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
-  './icons/favicon-32.png'
+  './icons/favicon-32.png',
+  './models/T-Rex.glb',
+  './models/Velociraptor.glb',
+  './models/Triceratops.glb'
 ];
 
 self.addEventListener('install', (event) => {
