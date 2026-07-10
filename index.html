@@ -336,6 +336,23 @@
     justify-content: center;
   }
   #bite-button:active { background: rgba(255, 160, 60, 0.75); }
+
+  /* ------------------------------------------------------------
+     Pantallas angostas (celular en vertical): HUD más compacto
+     ------------------------------------------------------------ */
+  @media (max-width: 520px) {
+    #hud { padding: 8px 8px; gap: 6px; }
+    .hud-panel { padding: 4px 8px; font-size: 12px; }
+    #lives-panel { font-size: 18px; gap: 3px; }
+    #level-panel { min-width: 110px; }
+    #score-panel { min-width: 78px; font-size: 13px; }
+    #high-score-line { font-size: 10px; }
+    #combo-panel { top: 60px; font-size: 12px; padding: 3px 10px; }
+    #dash-panel { min-width: 140px; font-size: 10px; padding: 4px 8px; bottom: 8px; }
+    #mute-btn { width: 32px; height: 32px; font-size: 14px; top: 8px; right: 8px; }
+    .overlay h1 { font-size: 24px; }
+    .species-card { width: 130px; padding: 8px 6px; }
+  }
 </style>
 </head>
 <body>
@@ -504,11 +521,22 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+// El FOV de three.js es vertical por defecto: en pantallas angostas (celular en
+// vertical) eso deja un campo de visión horizontal muy estrecho y todo se ve
+// como con zoom. Aquí recalculamos el FOV vertical para mantener siempre un
+// campo de visión horizontal razonable, sin importar la proporción de pantalla.
+const TARGET_HFOV_DEG = 78;
 function resizeRenderer() {
   const w = container.clientWidth, h = container.clientHeight;
+  const aspect = w / h;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(w, h);
-  camera.aspect = w / h;
+  camera.aspect = aspect;
+
+  const hfovRad = THREE.MathUtils.degToRad(TARGET_HFOV_DEG);
+  const vfovRad = 2 * Math.atan(Math.tan(hfovRad / 2) / aspect);
+  camera.fov = clamp(THREE.MathUtils.radToDeg(vfovRad), 45, 100);
+
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resizeRenderer);
