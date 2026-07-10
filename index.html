@@ -312,15 +312,20 @@
     touch-action: none;
   }
   #joystick-base {
+    /* Posición fija (centrado en su zona) en vez de aparecer donde se toca:
+       más simple y confiable, sin depender de cálculos de posición relativa. */
     position: absolute;
+    left: 50%; top: 50%;
     width: 110px; height: 110px;
     border-radius: 50%;
     background: rgba(255,255,255,0.12);
     border: 2px solid rgba(255,255,255,0.35);
     transform: translate(-50%, -50%);
-    opacity: 0;
+    opacity: 0.35;
     pointer-events: none;
+    transition: opacity .1s ease;
   }
+  #joystick-base.active { opacity: 0.9; }
   #joystick-thumb {
     position: absolute;
     left: 50%; top: 50%;
@@ -1153,15 +1158,6 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   document.body.classList.add('touch-device');
 }
 
-function positionJoystickBase(clientX, clientY) {
-  // #joystick-base es "position:absolute" dentro de #joystick-zone (no de #game-container),
-  // así que su posición debe calcularse relativa a esa zona, no al contenedor completo.
-  const rect = joystickZone.getBoundingClientRect();
-  joystickBase.style.left = (clientX - rect.left) + 'px';
-  joystickBase.style.top = (clientY - rect.top) + 'px';
-  joystickBase.style.opacity = 1;
-}
-
 function updateJoystick(clientX, clientY) {
   const baseRect = joystickBase.getBoundingClientRect();
   const centerX = baseRect.left + baseRect.width / 2;
@@ -1181,13 +1177,13 @@ function resetJoystick() {
   touchVector.dx = 0; touchVector.dy = 0;
   joystickThumb.style.left = '50%';
   joystickThumb.style.top = '50%';
-  joystickBase.style.opacity = 0;
+  joystickBase.classList.remove('active');
 }
 
 joystickZone.addEventListener('touchstart', (e) => {
   const t = e.changedTouches[0];
   joystickTouchId = t.identifier;
-  positionJoystickBase(t.clientX, t.clientY);
+  joystickBase.classList.add('active');
   updateJoystick(t.clientX, t.clientY);
   e.preventDefault();
 }, { passive: false });
