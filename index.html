@@ -174,6 +174,44 @@
     box-shadow: 0 0 10px rgba(0,0,0,0.4);
   }
 
+  /* ------------------------------------------------------------
+     Selector de skins (colores desbloqueables) y tabla de puntuaciones
+     ------------------------------------------------------------ */
+  #skin-picker { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .skin-swatch {
+    position: relative;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.25);
+    cursor: pointer;
+    font-family: inherit;
+    padding: 0;
+  }
+  .skin-swatch.selected { border-color: #7CFC7C; box-shadow: 0 0 8px rgba(124,252,124,0.7); }
+  .skin-swatch.locked { cursor: not-allowed; opacity: 0.55; }
+  .skin-swatch.locked::after {
+    content: '🔒';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  #leaderboard-panel {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    max-width: 340px;
+    width: 100%;
+  }
+  #leaderboard-list { list-style: none; text-align: left; margin-top: 4px; }
+  #leaderboard-list li { display: flex; justify-content: space-between; gap: 8px; color: #ddd; margin-bottom: 2px; }
+  #leaderboard-list li span:first-child { color: #ffd93d; font-weight: bold; }
+
   #final-score { font-size: 22px; color: #ffd93d; font-weight: bold; }
 
   .btn {
@@ -374,6 +412,8 @@
     .species-card b { font-size: 12px; }
     .species-card span:not(.species-swatch) { font-size: 10px; }
     .btn { padding: 10px 24px; font-size: 15px; }
+    .skin-swatch { width: 24px; height: 24px; }
+    #leaderboard-panel { font-size: 11px; padding: 6px 10px; }
   }
 </style>
 </head>
@@ -441,14 +481,21 @@
       </button>
     </div>
 
+    <div id="skin-picker"></div>
+
     <ul>
       <li><b>Mover:</b> WASD/Flechas (o el joystick táctil en móvil)</li>
       <li><b>Comer:</b> choca con dinosaurios más pequeños o de tu mismo nivel</li>
-      <li><b>Peligro:</b> evita a los dinosaurios de nivel mayor, ¡te quitarán una vida!</li>
+      <li><b>Peligro:</b> evita a los dinosaurios de nivel mayor, ¡te quitarán una vida! Cuidado con el <b>Rival Ápex</b>, un cazador único que te persigue.</li>
       <li><b>Combo:</b> come rápido y seguido para multiplicar tus puntos</li>
       <li><b>Mordisco Feroz:</b> pulsa ESPACIO (o el botón 🦷) para un ataque especial que te permite comer un nivel por encima del tuyo durante unos segundos</li>
       <li><b>Meta:</b> evoluciona hasta el Nivel 4 (¡Volador Ápex!) y consigue la mayor puntuación posible</li>
     </ul>
+
+    <div id="leaderboard-panel">
+      <b>🏆 Mejores puntuaciones</b>
+      <ol id="leaderboard-list"></ol>
+    </div>
     <p id="start-high-score">Récord actual: 0</p>
     <button class="btn" id="start-btn">Comenzar a Cazar</button>
   </div>
@@ -502,6 +549,8 @@ const dashPanel = document.getElementById('dash-panel');
 const dashBarFill = document.getElementById('dash-bar-fill');
 
 const speciesCards = document.querySelectorAll('.species-card');
+const skinPickerEl = document.getElementById('skin-picker');
+const leaderboardListEl = document.getElementById('leaderboard-list');
 
 const joystickZone = document.getElementById('joystick-zone');
 const joystickBase = document.getElementById('joystick-base');
@@ -596,13 +645,35 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+// ================================================================
+// BIOMAS: temas visuales que cambian el color del suelo, niebla y decoración.
+// Se elige uno al azar en cada partida nueva (ver initGame).
+// ================================================================
+const BIOMES = {
+  selva:     { name: 'Selva',     ground: 0x2e5d3a, fog: 0x1a3d24, rock: 0x6b6a5e, bush: 0x2c6e3c },
+  desierto:  { name: 'Desierto',  ground: 0xcaa869, fog: 0xd9b878, rock: 0x8a6a48, bush: 0x9c8a3d },
+  nevado:    { name: 'Nevado',    ground: 0xdfeaf0, fog: 0xb7c6cf, rock: 0x7c8a93, bush: 0xc3d9cc }
+};
+let currentBiome = 'selva';
+
+function applyBiome(biomeKey) {
+  const b = BIOMES[biomeKey];
+  currentBiome = biomeKey;
+  scene.background.set(b.fog);
+  scene.fog.color.set(b.fog);
+  ground.material.color.set(b.ground);
+  rockMat.color.set(b.rock);
+  bushMat.color.set(b.bush);
+}
+
 // Decoración estática (rocas y arbustos de bajo poli), generada una sola vez.
 // Las rocas son obstáculos sólidos (se guardan en coordenadas lógicas para colisión);
 // los arbustos son solo decorativos y se puede pasar a través de ellos.
+// (Los materiales se guardan en variables de módulo para poder recolorearlos por bioma.)
 const obstacles = [];
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6a5e, flatShading: true, roughness: 1 });
+const bushMat = new THREE.MeshStandardMaterial({ color: 0x2c6e3c, flatShading: true, roughness: 1 });
 (function buildStaticDecor() {
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6a5e, flatShading: true, roughness: 1 });
-  const bushMat = new THREE.MeshStandardMaterial({ color: 0x2c6e3c, flatShading: true, roughness: 1 });
   for (let i = 0; i < 22; i++) {
     // Evitar el centro del área (punto de aparición del jugador)
     let lx, ly;
@@ -711,14 +782,40 @@ function toggleMute() {
 }
 
 // ================================================================
-// RÉCORD (guardado en el navegador)
+// RÉCORD, TABLA DE PUNTUACIONES Y PROGRESO ACUMULADO (guardado en el navegador)
 // ================================================================
 const HIGH_SCORE_KEY = 'rexEvolutionHighScore';
+const LEADERBOARD_KEY = 'rexEvolutionLeaderboard';
+const LIFETIME_SCORE_KEY = 'rexEvolutionLifetimeScore';
+const LEADERBOARD_SIZE = 5;
+
 function getHighScore() { return parseInt(localStorage.getItem(HIGH_SCORE_KEY) || '0', 10); }
 function saveHighScoreIfBeaten(value) {
   const current = getHighScore();
   if (value > current) { localStorage.setItem(HIGH_SCORE_KEY, String(value)); return true; }
   return false;
+}
+
+// Top 5 mejores partidas (no solo el récord absoluto)
+function getLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveToLeaderboard(entry) {
+  const board = getLeaderboard();
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  board.length = Math.min(board.length, LEADERBOARD_SIZE);
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(board));
+  return board;
+}
+
+// Puntuación acumulada de todas las partidas (para desbloquear skins)
+function getLifetimeScore() { return parseInt(localStorage.getItem(LIFETIME_SCORE_KEY) || '0', 10); }
+function addLifetimeScore(amount) {
+  const total = getLifetimeScore() + amount;
+  localStorage.setItem(LIFETIME_SCORE_KEY, String(total));
+  return total;
 }
 
 // ================================================================
@@ -770,8 +867,99 @@ const FLYER_LEVEL = {
   maxSpeed: 15, xpToNext: Infinity, flying: true, flightHeight: 4.5
 };
 
+// Skins desbloqueables por especie: se desbloquean acumulando puntos a lo largo de
+// varias partidas (ver getLifetimeScore). "colors: null" significa que se usan los
+// colores originales de cada nivel (evolución de color); un skin con colores fijos
+// se aplica igual a los 3 niveles de esa especie.
+const SKINS = {
+  rex: [
+    { id: 'default', name: 'Original', unlockScore: 0, colors: null },
+    { id: 'sombrio', name: 'Sombrío', unlockScore: 250, colors: { color: '#4a4a52', dark: '#1c1c20', light: '#8a8a92' } },
+    { id: 'dorado', name: 'Dorado', unlockScore: 700, colors: { color: '#f0c94d', dark: '#a3801f', light: '#fff0b0' } }
+  ],
+  raptor: [
+    { id: 'default', name: 'Original', unlockScore: 0, colors: null },
+    { id: 'sombrio', name: 'Sombrío', unlockScore: 250, colors: { color: '#4a4a52', dark: '#1c1c20', light: '#8a8a92' } },
+    { id: 'esmeralda', name: 'Esmeralda', unlockScore: 700, colors: { color: '#3ddc84', dark: '#1a6b3f', light: '#b6ffd8' } }
+  ],
+  trike: [
+    { id: 'default', name: 'Original', unlockScore: 0, colors: null },
+    { id: 'sombrio', name: 'Sombrío', unlockScore: 250, colors: { color: '#4a4a52', dark: '#1c1c20', light: '#8a8a92' } },
+    { id: 'rojizo', name: 'Rojizo', unlockScore: 700, colors: { color: '#c96a5a', dark: '#6e2e22', light: '#f0b8a8' } }
+  ]
+};
+
+const SKIN_SELECTION_KEY = 'rexEvolutionSkins';
+function getSelectedSkinId(speciesKey) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SKIN_SELECTION_KEY) || '{}');
+    return saved[speciesKey] || 'default';
+  } catch { return 'default'; }
+}
+function setSelectedSkinId(speciesKey, skinId) {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SKIN_SELECTION_KEY) || '{}'); } catch {}
+  saved[speciesKey] = skinId;
+  localStorage.setItem(SKIN_SELECTION_KEY, JSON.stringify(saved));
+}
+function getSkinConfig(speciesKey) {
+  const skinId = getSelectedSkinId(speciesKey);
+  return SKINS[speciesKey].find((s) => s.id === skinId) || SKINS[speciesKey][0];
+}
+
+// Dibuja los círculos de color de skins para la especie elegida (bloqueados si no
+// se ha acumulado suficiente puntuación entre partidas)
+function renderSkinPicker(speciesKey) {
+  const lifetime = getLifetimeScore();
+  const currentSkinId = getSelectedSkinId(speciesKey);
+  skinPickerEl.innerHTML = '';
+  SKINS[speciesKey].forEach((skin) => {
+    const unlocked = lifetime >= skin.unlockScore;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'skin-swatch' + (skin.id === currentSkinId ? ' selected' : '') + (unlocked ? '' : ' locked');
+    btn.style.background = skin.colors ? skin.colors.color : SPECIES[speciesKey].levels[1].color;
+    btn.title = unlocked ? skin.name : `${skin.name} — se desbloquea con ${skin.unlockScore} puntos acumulados`;
+    if (unlocked) {
+      btn.addEventListener('click', () => {
+        setSelectedSkinId(speciesKey, skin.id);
+        renderSkinPicker(speciesKey);
+      });
+    }
+    skinPickerEl.appendChild(btn);
+  });
+}
+
+function renderLeaderboard() {
+  const board = getLeaderboard();
+  leaderboardListEl.innerHTML = '';
+  if (board.length === 0) {
+    const li = document.createElement('li');
+    li.style.justifyContent = 'center';
+    li.style.color = '#888';
+    li.textContent = 'Aún no hay partidas registradas';
+    leaderboardListEl.appendChild(li);
+    return;
+  }
+  board.forEach((entry) => {
+    const li = document.createElement('li');
+    const left = document.createElement('span');
+    left.textContent = entry.score;
+    const right = document.createElement('span');
+    right.textContent = `${entry.speciesName} · Nv.${entry.level}`;
+    li.appendChild(left);
+    li.appendChild(right);
+    leaderboardListEl.appendChild(li);
+  });
+}
+
 function buildPlayerLevels(speciesKey) {
-  return [...SPECIES[speciesKey].levels, FLYER_LEVEL];
+  const skin = getSkinConfig(speciesKey);
+  const levels = SPECIES[speciesKey].levels.map((lvl) => {
+    if (!lvl || !skin.colors) return lvl;
+    return { ...lvl, color: skin.colors.color, dark: skin.colors.dark, light: skin.colors.light };
+  });
+  return [...levels, FLYER_LEVEL];
 }
 
 let selectedSpecies = 'rex';
@@ -783,8 +971,15 @@ const MAX_LEVEL = 4; // 3 niveles propios de la especie + 1 nivel volador compar
 const ENEMY_TYPES = {
   small:  { level: 1, radius: 0.9, speed: 9.5, color: '#4dd6c9', dark: '#1d6b62', light: '#d4fff8', variant: 'small',  xp: 12, points: 10 },
   medium: { level: 2, radius: 1.6, speed: 6.5, color: '#b06cf0', dark: '#5a2680', light: '#ecd6ff', variant: 'medium', xp: 30, points: 25 },
-  giant:  { level: 3, radius: 2.6, speed: 4.0, color: '#7a3b2e', dark: '#2b120c', light: '#c99a7a', variant: 'giant',  xp: 55, points: 50 }
+  giant:  { level: 3, radius: 2.6, speed: 4.0, color: '#7a3b2e', dark: '#2b120c', light: '#c99a7a', variant: 'giant',  xp: 55, points: 50 },
+  // Rival Ápex: mini-jefe único que persigue activamente al jugador en vez de vagar al azar
+  rival:  { level: 3, radius: 3.2, speed: 6.5, color: '#8a1414', dark: '#2b0505', light: '#c94d4d', variant: 'giant',  xp: 90, points: 150, isRival: true }
 };
+
+// Cada cuánto puede aparecer un nuevo Rival Ápex (solo hay uno a la vez) y cuánto
+// tiempo persigue al jugador antes de rendirse si no lo alcanza ni lo derrotan
+const RIVAL_SPAWN_INTERVAL = [45, 75];
+const RIVAL_LIFETIME = 40;
 
 // Comida especial (power-up): la puede comer cualquier nivel, sin riesgo
 const POWERUP = { radius: 0.8, xp: 40, points: 40, color: '#ffe14d', dark: '#c9930a', light: '#fff6c2' };
@@ -1046,6 +1241,7 @@ let comboCount = 0, comboTimer = 0;
 let dashTimer = 0, dashCooldownTimer = 0;
 let shakeTime = 0, shakeMag = 0;
 let wantDash = false; // se activa una vez por pulsación de ESPACIO/botón de mordisco
+let rivalActive = false, rivalSpawnTimer = 0;
 const MAX_ENEMIES = 20;
 const MAX_LIVES = 3;
 const COMBO_WINDOW = 2.2; // segundos para mantener viva una racha de combo
@@ -1118,7 +1314,14 @@ function initGame() {
   dashCooldownTimer = 0;
   shakeTime = 0;
   shakeMag = 0;
+  rivalActive = false;
+  rivalSpawnTimer = rand(20, 35); // el primer Rival Ápex aparece antes, para mostrar la mecánica
   highScore = getHighScore();
+
+  const biomeKeys = Object.keys(BIOMES);
+  applyBiome(biomeKeys[Math.floor(rand(0, biomeKeys.length))]);
+  spawnFloatingText(player.x, player.y - 5, `🌎 Bioma: ${BIOMES[currentBiome].name}`);
+
   running = true;
   updateHUD();
 }
@@ -1260,6 +1463,39 @@ function spawnEnemy() {
   });
 }
 
+// Rival Ápex: aparece desde un borde igual que un enemigo normal, pero persigue
+// activamente al jugador (su velocidad se recalcula cada frame en update()).
+function spawnRival() {
+  const def = ENEMY_TYPES.rival;
+  const edge = Math.floor(rand(0, 4));
+  let x, y;
+  const margin = def.radius + 2;
+  switch (edge) {
+    case 0: x = rand(0, ARENA_WIDTH); y = -margin; break;
+    case 1: x = ARENA_WIDTH + margin; y = rand(0, ARENA_DEPTH); break;
+    case 2: x = rand(0, ARENA_WIDTH); y = ARENA_DEPTH + margin; break;
+    default: x = -margin; y = rand(0, ARENA_DEPTH); break;
+  }
+
+  const mesh = buildDinoGroup(def, def.variant, def.level);
+  mesh.group.scale.setScalar(def.radius);
+  scene.add(mesh.group);
+
+  enemies.push({
+    type: 'rival',
+    x, y,
+    vx: 0, vy: 0,
+    radius: def.radius,
+    wobble: rand(0, Math.PI * 2),
+    angle: 0,
+    rivalLife: RIVAL_LIFETIME,
+    mesh
+  });
+  rivalActive = true;
+  sfxDamage();
+  spawnFloatingText(player.x, player.y - 3, '⚠️ ¡RIVAL ÁPEX TE ESTÁ CAZANDO!');
+}
+
 // Aparece en un punto aleatorio, lejos del borde, cada cierto tiempo
 function spawnPickup() {
   const mesh = buildPickupMesh();
@@ -1342,6 +1578,12 @@ function update(dt) {
     pickupTimer = rand(7, 12);
   }
 
+  // --- Rival Ápex: solo uno a la vez, aparece cada cierto tiempo ---
+  if (!rivalActive) {
+    rivalSpawnTimer -= dt;
+    if (rivalSpawnTimer <= 0) spawnRival();
+  }
+
   // --- Habilidad especial: Mordisco Feroz ---
   if (dashCooldownTimer > 0) dashCooldownTimer -= dt;
   if (dashTimer > 0) dashTimer -= dt;
@@ -1420,11 +1662,29 @@ function update(dt) {
   const margin = 14;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
+    const enemyDef = ENEMY_TYPES[e.type];
+
+    if (enemyDef.isRival) {
+      // El Rival Ápex persigue activamente al jugador en vez de vagar al azar
+      const seekAngle = Math.atan2(player.y - e.y, player.x - e.x);
+      e.vx = Math.cos(seekAngle) * enemyDef.speed;
+      e.vy = Math.sin(seekAngle) * enemyDef.speed;
+      e.rivalLife -= dt;
+      if (e.rivalLife <= 0) {
+        disposeObject3D(e.mesh.group);
+        scene.remove(e.mesh.group);
+        enemies.splice(i, 1);
+        rivalActive = false;
+        rivalSpawnTimer = rand(RIVAL_SPAWN_INTERVAL[0], RIVAL_SPAWN_INTERVAL[1]);
+        continue;
+      }
+    }
+
     e.x += e.vx * dt;
     e.y += e.vy * dt;
     e.wobble += dt * 6;
 
-    if (e.x < -margin || e.x > ARENA_WIDTH + margin || e.y < -margin || e.y > ARENA_DEPTH + margin) {
+    if (!enemyDef.isRival && (e.x < -margin || e.x > ARENA_WIDTH + margin || e.y < -margin || e.y > ARENA_DEPTH + margin)) {
       disposeObject3D(e.mesh.group);
       scene.remove(e.mesh.group);
       enemies.splice(i, 1);
@@ -1434,12 +1694,16 @@ function update(dt) {
     // --- Colisión con el jugador ---
     const d = dist(player, e);
     if (d < levelDef.radius + e.radius) {
-      const enemyDef = ENEMY_TYPES[e.type];
       // El Mordisco Feroz permite comer un nivel por encima del propio
       const canEat = enemyDef.level <= player.level + (dashActive ? 1 : 0);
 
       if (canEat) {
         registerEat(enemyDef.points, enemyDef.xp, e.x, e.y, enemyDef.color, enemyDef.radius > 1.8);
+        if (enemyDef.isRival) {
+          spawnFloatingText(e.x, e.y - 2, '¡RIVAL DERROTADO!');
+          rivalActive = false;
+          rivalSpawnTimer = rand(RIVAL_SPAWN_INTERVAL[0], RIVAL_SPAWN_INTERVAL[1]);
+        }
         disposeObject3D(e.mesh.group);
         scene.remove(e.mesh.group);
         enemies.splice(i, 1);
@@ -1763,9 +2027,14 @@ function endGame() {
   running = false;
   const isNewRecord = saveHighScoreIfBeaten(score);
   highScore = getHighScore();
+  saveToLeaderboard({ score, speciesName: SPECIES[selectedSpecies].name, level: player.level });
+  const newLifetime = addLifetimeScore(score);
   finalScoreEl.textContent = `Puntuación final: ${score}`;
   finalLevelEl.textContent = `Nivel alcanzado: ${player.level} (${PLAYER_LEVELS[player.level].title})`;
   finalHighScoreEl.textContent = isNewRecord ? `🏆 ¡Nuevo récord! ${highScore}` : `Récord: ${highScore}`;
+  renderLeaderboard();
+  renderSkinPicker(selectedSpecies);
+  startHighScoreEl.textContent = `Récord actual: ${highScore} · Puntos acumulados: ${newLifetime}`;
   gameOverScreen.classList.remove('hidden');
 }
 
@@ -1781,6 +2050,7 @@ speciesCards.forEach((card) => {
   card.addEventListener('click', () => {
     selectedSpecies = card.dataset.species;
     speciesCards.forEach((c) => c.classList.toggle('selected', c === card));
+    renderSkinPicker(selectedSpecies);
   });
 });
 
@@ -1802,7 +2072,9 @@ player = { x: ARENA_WIDTH / 2, y: ARENA_DEPTH / 2, vx: 0, vy: 0, level: 1, xp: 0
 rebuildPlayerMesh();
 enemies = []; particles = []; floatingTexts = []; pickups = []; shockwaves = []; score = 0;
 highScore = getHighScore();
-startHighScoreEl.textContent = `Récord actual: ${highScore}`;
+startHighScoreEl.textContent = `Récord actual: ${highScore} · Puntos acumulados: ${getLifetimeScore()}`;
+renderSkinPicker(selectedSpecies);
+renderLeaderboard();
 updateHUD();
 
 camera.position.set(0, 9, 17);
