@@ -24,6 +24,7 @@
   html, body {
     width: 100%;
     height: 100%;
+    height: 100dvh; /* corrige el bug de 100vh en móviles: la barra de direcciones recorta la pantalla */
     overflow: hidden;
     font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
     background: #0b1d13;
@@ -33,6 +34,7 @@
     position: relative;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background: radial-gradient(ellipse at center, #2e5d3a 0%, #1a3d24 55%, #0d2414 100%);
     overflow: hidden;
   }
